@@ -1,0 +1,80 @@
+dataset: a2d2
+version: 0.1
+
+cost_values:
+  traversable: 0
+  caution: 50
+  non_traversable: 180
+  static_obstacle: 254
+  dynamic_obstacle: 254
+  unknown: 255
+
+default_category: unknown
+
+class_groups:
+  traversable:
+    - RD normal street
+    - Drivable cobblestone
+    - Solid line
+    - Dashed line
+    - Zebra crossing
+    - Painted driv. instr.
+
+  caution:
+    - Sidewalk
+    - Parking area
+    - Slow drive area
+    - Speed bumper
+    - Nature object
+
+  non_traversable:
+    - Non-drivable street
+    - RD restricted area
+
+  dynamic_obstacle:
+    - Car 1
+    - Car 2
+    - Car 3
+    - Car 4
+    - Bicycle 1
+    - Bicycle 2
+    - Bicycle 3
+    - Bicycle 4
+    - Pedestrian 1
+    - Pedestrian 2
+    - Pedestrian 3
+    - Truck 1
+    - Truck 2
+    - Truck 3
+    - Small vehicles 1
+    - Small vehicles 2
+    - Small vehicles 3
+    - Utility vehicle 1
+    - Utility vehicle 2
+    - Tractor
+    - Animals
+
+  static_obstacle:
+    - Sidebars
+    - Curbstone
+    - Road blocks
+    - Obstacles / trash
+    - Poles
+    - Grid structure
+    - Signal corpus
+    - Buildings
+    - Traffic signal 1
+    - Traffic signal 2
+    - Traffic signal 3
+    - Traffic sign 1
+    - Traffic sign 2
+    - Traffic sign 3
+    - Electronic traffic
+    - Traffic guide obj.
+
+  background_ignore:
+    - Irrelevant signs
+    - Ego car
+    - Sky
+    - Blurred area
+    - Rain dirt
