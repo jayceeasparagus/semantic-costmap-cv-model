@@ -1,0 +1,107 @@
+version: 1
+dataset: A2D2
+ignore_id: 255
+num_model_classes: 6
+
+# Cost values follow Nav2's uint8 cost convention:
+# 0 is free, 1-252 are graded costs, 253 is inscribed, 254 is lethal,
+# and 255 is unknown. A null cost means the class is never inserted.
+classes:
+  - name: drivable
+    train_id: 0
+    visualization_rgb: [0, 200, 0]
+    costmap_cost: 0
+    temporal_policy: persistent_surface
+    source_labels:
+      - Solid line
+      - Drivable cobblestone
+      - Painted driv. instr.
+      - Dashed line
+      - RD normal street
+
+  - name: caution
+    train_id: 1
+    visualization_rgb: [255, 255, 0]
+    costmap_cost: 80
+    temporal_policy: persistent_surface
+    source_labels:
+      - Speed bumper
+      - Zebra crossing
+      - Slow drive area
+      - Parking area
+
+  - name: non_drivable
+    train_id: 2
+    visualization_rgb: [255, 128, 0]
+    costmap_cost: 220
+    temporal_policy: persistent_surface
+    source_labels:
+      - Non-drivable street
+      - RD restricted area
+      - Nature object
+      - Sidewalk
+
+  - name: static_obstacle
+    train_id: 3
+    visualization_rgb: [255, 0, 0]
+    costmap_cost: 254
+    temporal_policy: persistent_obstacle
+    source_labels:
+      - Traffic signal 1
+      - Traffic signal 2
+      - Traffic signal 3
+      - Traffic sign 1
+      - Traffic sign 2
+      - Traffic sign 3
+      - Sidebars
+      - Curbstone
+      - Irrelevant signs
+      - Road blocks
+      - Obstacles / trash
+      - Poles
+      - Grid structure
+      - Signal corpus
+      - Electronic traffic
+      - Traffic guide obj.
+      - Buildings
+
+  - name: dynamic_obstacle
+    train_id: 4
+    visualization_rgb: [255, 0, 255]
+    costmap_cost: 254
+    temporal_policy: short_lived_obstacle
+    source_labels:
+      - Car 1
+      - Car 2
+      - Car 3
+      - Car 4
+      - Bicycle 1
+      - Bicycle 2
+      - Bicycle 3
+      - Bicycle 4
+      - Pedestrian 1
+      - Pedestrian 2
+      - Pedestrian 3
+      - Truck 1
+      - Truck 2
+      - Truck 3
+      - Small vehicles 1
+      - Small vehicles 2
+      - Small vehicles 3
+      - Utility vehicle 1
+      - Utility vehicle 2
+      - Tractor
+      - Animals
+
+  - name: background
+    train_id: 5
+    visualization_rgb: [0, 0, 0]
+    costmap_cost: null
+    temporal_policy: never_insert
+    source_labels:
+      - Sky
+
+ignored_source_labels:
+  - Ego car
+  - Blurred area
+  - Rain dirt

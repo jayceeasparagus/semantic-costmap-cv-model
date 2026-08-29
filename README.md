@@ -20,4 +20,22 @@ LiDAR + calibration -----------------------+
                               bird's-eye semantic cost grid
                                            |
                                            v
-                              ROS 2 / Nav2 layered costmap
+                              ROS 2 / Nav2 layered costmap```
+
+SLAM or localization supplies robot poses so observations can be placed consistently over time. This project integrates an existing pose provider rather than implementing SLAM itself.
+
+## Initial scope
+
+- Six-class RGB semantic segmentation
+- Camera-LiDAR calibration and projection
+- Confidence-aware semantic point painting
+- Bird's-eye-view semantic cost generation
+- Temporal accumulation using timestamped poses
+- ROS 2 replay and perception nodes
+- Custom Nav2 costmap layer
+- RViz visualization and system benchmarks
+
+## Design documents
+
+- [`docs/architecture.md`](docs/architecture.md) defines the complete system flow, interfaces, coordinate frames, safety rules, and delivery stages.
+- [`configs/semantic_classes.yaml`](configs/semantic_classes.yaml) is the source of truth for model classes, A2D2 label grouping, and navigation costs.
