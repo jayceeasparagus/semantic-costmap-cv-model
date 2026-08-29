@@ -1,298 +1,153 @@
-# System architecture
+# Project architecture
 
-Status: accepted initial architecture
+This document describes the intended system without committing the repository
+to implementation details too early.
 
-## 1. Project definition
+## 1. Inputs and output
 
-The project is a semantic LiDAR costmap pipeline. An RGB model predicts dense
-semantic probabilities, calibrated LiDAR supplies metric position, and a custom
-Nav2 layer turns the fused observations into navigation costs.
+Inputs:
 
-The segmentation model does not directly output a costmap. The complete
-perception pipeline produces the costmap.
+- synchronized front-camera RGB frames;
+- synchronized LiDAR point clouds;
+- camera intrinsics and camera-to-LiDAR extrinsics;
+- timestamped robot poses when temporal mapping is introduced.
 
-## 2. Scope
+Output:
 
-The initial system includes:
+- a two-dimensional grid whose cells contain Nav2-compatible navigation costs.
 
-- a six-class U-Net-style semantic segmentation model trained on A2D2;
-- synchronized RGB and LiDAR ingestion;
-- camera-LiDAR projection and semantic point painting;
-- confidence-aware bird's-eye-view rasterization;
-- temporal evidence accumulation using externally supplied poses;
-- ROS 2 replay and perception nodes;
-- a custom Nav2 costmap layer;
-- RViz debugging, accuracy evaluation, and runtime benchmarks.
+## 2. Offline model training
 
-The initial system does not include monocular depth estimation, a learned LiDAR
-network, a custom SLAM implementation, 3D detection/tracking, vehicle control,
-or multi-camera fusion.
+A U-Net-style model will be trained from scratch on A2D2 RGB images and reduced
+semantic masks. Its output is a six-channel logit tensor. Softmax converts those
+logits into a probability for each class at every pixel.
 
-## 3. End-to-end flow
+The proposed classes are:
 
-```text
-OFFLINE TRAINING
-A2D2 RGB + source labels
-        -> compact six-class masks
-        -> U-Net training and validation
-        -> best model checkpoint
-
-RUNTIME
-RGB image
-        -> model logits
-        -> per-pixel class probabilities --------+
-                                                   |
-LiDAR + camera calibration ------------------------+
-        -> project points into image
-        -> sample semantic probabilities
-        -> painted point cloud
-        -> bird's-eye semantic evidence grid
-        -> semantic Nav2 costmap layer
-
-Raw LiDAR
-        -> standard Nav2 obstacle or voxel layer
-
-SLAM/localization + odometry
-        -> timestamped transforms
-        -> persistent placement of observations
-
-standard layer + semantic layer + inflation layer
-        -> combined Nav2 costmap
-        -> RViz and planner
-```
-
-## 4. Semantic contract
-
-`configs/semantic_classes.yaml` is the single source of truth for model output
-IDs, source-label grouping, visualization colors, navigation costs, and temporal
-policies.
-
-The model has six output channels:
-
-| ID | Class | Navigation meaning | Default cost |
+| ID | Class | Navigation meaning | Initial cost |
 |---:|---|---|---:|
-| 0 | drivable | preferred traversable surface | 0 |
+| 0 | drivable | preferred surface | 0 |
 | 1 | caution | traversable but less preferred | 80 |
-| 2 | non_drivable | strongly avoided surface | 220 |
+| 2 | non_drivable | strongly avoid | 220 |
 | 3 | static_obstacle | fixed collision hazard | 254 |
-| 4 | dynamic_obstacle | moving or potentially moving hazard | 254 |
-| 5 | background | visible context that is never mapped | none |
+| 4 | dynamic_obstacle | moving collision hazard | 254 |
+| 5 | background | never add to the grid | none |
 
-Training-mask ID 255 means ignore and is excluded from loss and metrics. Nav2
-cost 255 means unknown space. These values share a number but not a meaning and
-must remain separate in code.
+The exact A2D2-to-model mapping will be implemented only after inspecting class
+counts and examples. That prevents us from locking in a taxonomy that creates
+an unusably rare class.
 
-## 5. Segmentation model
+## 3. Camera-LiDAR connection: semantic point painting
 
-The initial model is a U-Net-style encoder-decoder implemented in PyTorch. The
-encoder extracts increasingly abstract features, the decoder restores spatial
-resolution, and skip connections preserve boundaries and small objects.
+The natural fusion algorithm for this project is **semantic point painting**.
+It is sequential fusion: infer camera semantics first, then attach those
+semantics to geometrically aligned LiDAR points.
 
-The final layer emits six logits per pixel. Softmax probabilities are retained
-for fusion rather than immediately reducing every pixel to an argmax class.
+For each LiDAR point:
 
-Training uses sequence- or scene-level splits to avoid temporal leakage. Primary
-metrics are per-class IoU, all-class mIoU, navigation-only mIoU, model size,
-latency, and throughput.
+1. Transform it from the LiDAR frame to the camera frame using the calibrated
+   extrinsic transform.
+2. Reject points behind the camera.
+3. Project the 3D camera-frame point into image coordinates using the camera
+   intrinsics.
+4. Reject points outside the image.
+5. Sample the model's six probabilities at that image pixel.
+6. Store the 3D point together with its semantic probabilities.
 
-## 6. Sensor synchronization
-
-A fusion update requires an RGB frame and LiDAR cloud with compatible capture
-times. Offline code pairs records by dataset timestamps. ROS 2 code uses
-timestamped messages and an approximate-time synchronizer with matching QoS.
-Headerless or arrival-time synchronization is not accepted.
-
-Every transform lookup uses the sensor message timestamp, not the most recent
-available transform.
-
-## 7. Camera-LiDAR projection
-
-For a homogeneous LiDAR point `p_L`, extrinsic calibration gives its position in
-the camera frame:
+In compact form:
 
 ```text
-p_C = T_C_L p_L
+p_camera = T_camera_lidar * p_lidar
+u = fx * X / Z + cx
+v = fy * Y / Z + cy
+painted_point = [x, y, z, P(class 0), ..., P(class 5)]
 ```
 
-Points behind the camera or outside the valid sensor range are discarded. For a
-rectified pinhole image, a camera-frame point `(X, Y, Z)` projects to:
+This is more defensible than estimating distance from the RGB image because the
+dataset already provides measured LiDAR geometry and calibration.
 
-```text
-u = fx X / Z + cx
-v = fy Y / Z + cy
-```
+## 4. Building the cost grid
 
-Distorted images must be rectified first or projected with the full distortion
-model. Projection is verified visually and, where A2D2 supplies image
-coordinates, numerically against the dataset registration.
-
-## 8. Semantic point painting
-
-For each valid projected point, the fusion module samples the model probability
-vector at pixel `(u, v)` and appends it to the point:
-
-```text
-[x, y, z, intensity, P0, P1, P2, P3, P4, P5]
-```
-
-This sequential camera-LiDAR fusion method is semantic point painting. A small
-pixel-space depth buffer rejects farther points that would otherwise inherit the
-semantic class of an occluding foreground object.
-
-Low-confidence or background predictions do not mark free space. They produce no
-semantic update.
-
-## 9. Bird's-eye semantic grid
-
-Painted points are transformed to the active costmap frame and rasterized by
-metric position:
+Painted points are transformed into the grid frame and assigned to cells:
 
 ```text
 cell_x = floor((point_x - origin_x) / resolution)
 cell_y = floor((point_y - origin_y) / resolution)
 ```
 
-For every observed cell, class evidence is accumulated from point probabilities:
+Each cell aggregates the semantic evidence from its points. We will begin with
+a simple, inspectable rule such as the highest-confidence valid class or a
+probability-weighted cost. Later experiments can compare aggregation rules.
+
+Important safety rule: semantic predictions may increase navigation cost, but
+they may not erase an obstacle detected by raw LiDAR geometry.
+
+## 5. ROS 2 and Nav2
+
+Nav2 already provides map storage, obstacle layers, inflation, coordinate-frame
+handling, and planner interfaces. This project should contribute a semantic
+layer, not recreate the navigation stack.
+
+The intended layer composition is:
 
 ```text
-evidence[cell, class] += observation_weight * P(class | point)
+existing static map
+    + raw LiDAR obstacle/voxel layer
+    + this project's semantic cost layer
+    + Nav2 inflation layer
+    = planner-ready costmap
 ```
 
-Normalized evidence produces a cell probability distribution. The initial
-graded cost is the probability-weighted sum of configured class costs. Static or
-dynamic obstacle evidence above a configurable threshold produces lethal cost.
+The first cost grid can be generated offline in Python. Once its math is tested,
+a ROS 2 node will publish debug products and a Nav2 costmap plugin will merge
+semantic costs into Nav2's master grid.
 
-Multiple observations may increase a cell's cost, but semantic inference may
-never clear a geometric obstacle.
+## 6. Where SLAM belongs
 
-## 10. Nav2 layer composition
+SLAM provides the robot pose and the `map -> odom` relationship. It does not
+produce camera semantics. This project will consume poses from an existing SLAM
+system, such as SLAM Toolbox, rather than implement SLAM.
 
-The intended Nav2 order is:
+Development should begin with a robot-relative rolling costmap, which needs no
+persistent global map. Persistent accumulation comes later, after a data source
+with valid odometry/transforms is available. A2D2 is useful for training and
+sensor-fusion experiments, but it does not need to serve every ROS integration
+stage.
 
-```text
-StaticLayer
-ObstacleLayer or VoxelLayer       # raw LiDAR geometry and ray clearing
-SemanticCostmapLayer              # painted LiDAR navigation meaning
-InflationLayer                    # robot footprint margin
-```
+## 7. Planned implementation phases
 
-The custom C++ `SemanticCostmapLayer` inherits from
-`nav2_costmap_2d::Layer`, subscribes to painted points, tracks changed bounds,
-and merges semantic costs conservatively into the master grid.
+### Phase A: segmentation
 
-A debug occupancy grid may be published for RViz, but it is not the primary
-Nav2 integration interface.
+Create paired RGB/mask data, train U-Net, inspect predictions, and report
+per-class IoU and mIoU.
 
-## 11. Temporal fusion
+### Phase B: geometric fusion
 
-Each observation is transformed using the robot pose at its timestamp. Initial
-temporal fusion uses decayed evidence:
+Load one RGB/LiDAR/calibration sample, verify projection visually, then paint
+LiDAR points with ground-truth semantics before using model predictions.
 
-```text
-evidence_t = decay * evidence_(t-1) + current_observation
-```
+### Phase C: costmap
 
-Surface and static-obstacle evidence persists longer than dynamic-obstacle
-evidence. Dynamic observations expire quickly to avoid ghost obstacles. Standard
-LiDAR ray clearing remains responsible for geometric free-space updates.
+Rasterize painted points into a robot-relative grid and validate orientation,
+resolution, costs, and obstacle precedence.
 
-## 12. Coordinate frames
+### Phase D: temporal and ROS integration
 
-The required frame tree is:
+Use timestamped transforms to place observations over time, publish ROS 2 debug
+topics, and integrate a semantic layer with Nav2.
 
-```text
-map -> odom -> base_link -> camera_link -> camera_optical_frame
-                         -> lidar_link
-```
+### Phase E: engineering finish
 
-Responsibilities:
+Add automated tests, accuracy/runtime benchmarks, Docker packaging, RViz demos,
+and final documentation only after the pipeline works end to end.
 
-- SLAM or localization publishes `map -> odom`;
-- odometry publishes `odom -> base_link`;
-- calibrated static transforms connect `base_link` to each sensor;
-- the semantic mapper consumes these transforms but does not estimate them.
+## 8. Success criteria
 
-ROS REP-103/105 conventions and SI units are used throughout.
+The finished project should demonstrate:
 
-## 13. ROS 2 components and topics
-
-### A2D2 replay node
-
-Publishes dataset records as robot-like sensor streams:
-
-- `/camera/front/image_rect` (`sensor_msgs/Image`)
-- `/camera/front/camera_info` (`sensor_msgs/CameraInfo`)
-- `/lidar/front/points` (`sensor_msgs/PointCloud2`)
-- `/odom` and `/tf` when pose data is available
-
-### Semantic fusion node
-
-Runs model inference and point painting. It publishes:
-
-- `/semantic/mask` for class-ID visualization;
-- `/semantic/confidence` for uncertainty inspection;
-- `/semantic/painted_points` with class-score fields;
-- `/semantic/projection_overlay` for calibration debugging.
-
-### Semantic costmap layer
-
-Consumes painted points, transforms them into the costmap frame, accumulates
-evidence, applies temporal policies, and updates the Nav2 master costmap.
-
-## 14. Package boundaries
-
-```text
-src/semantic_costmap/
-  data/          A2D2 records, labels, manifests, and splits
-  models/        U-Net definition
-  training/      losses, loops, checkpoints, and metrics
-  inference/     preprocessing and model runtime
-  geometry/      calibration, transforms, and projection
-  fusion/        point painting and temporal evidence
-  costmap/       grid math and cost policy reference implementation
-  evaluation/    segmentation, projection, map, and latency metrics
-
-ros2_ws/src/
-  semantic_costmap_ros/    replay and fusion nodes
-  semantic_costmap_layer/  C++ Nav2 plugin
-```
-
-Notebooks orchestrate library code; they do not own reusable implementation.
-Large data, checkpoints, generated maps, and videos remain outside Git.
-
-## 15. Safety and correctness invariants
-
-1. Raw LiDAR geometry overrides semantic free-space predictions.
-2. Background and low-confidence predictions never clear cells.
-3. Missing transforms or stale synchronized data cause an update to be dropped.
-4. Unknown space is not silently converted to drivable space.
-5. Every model output ID is defined in the semantic configuration.
-6. Every A2D2 source label is mapped exactly once or explicitly ignored.
-7. Dynamic evidence expires; static evidence cannot persist without bounds.
-8. Model, projection, fusion, and ROS wrappers are tested independently.
-
-## 16. Validation ladder
-
-Development proceeds in independently verifiable stages:
-
-1. validate the taxonomy against all A2D2 labels;
-2. train and evaluate segmentation using scene-level splits;
-3. validate projection using ground-truth masks before model predictions;
-4. paint one LiDAR frame and render it in image and bird's-eye views;
-5. generate a single-frame semantic cost grid;
-6. accumulate a sequence using supplied poses;
-7. replay the sequence through ROS 2;
-8. integrate the custom layer with Nav2 and RViz;
-9. benchmark accuracy, latency, memory, and temporal stability;
-10. add Docker packaging and continuous integration.
-
-Ground-truth-mask projection is a required geometry test, not a disposable
-prototype. It separates calibration defects from model errors.
-
-## 17. References
-
-- PointPainting: <https://openaccess.thecvf.com/content_CVPR_2020/papers/Vora_PointPainting_Sequential_Fusion_for_3D_Object_Detection_CVPR_2020_paper.pdf>
-- Nav2 costmap plugin guide: <https://docs.nav2.org/plugin_tutorials/docs/writing_new_costmap2d_plugin.html>
-- Nav2 transform setup: <https://docs.nav2.org/rolling/configuration_and_development/first_time_robot_setup_guide/transformation/setup_transforms/>
-- ROS 2 approximate synchronization: <https://docs.ros.org/en/ros2_packages/jazzy/api/message_filters/doc/Tutorials/Approximate-Synchronizer-Cpp.html>
-- A2D2 dataset paper: <https://www.a2d2.audi/content/dam/a2d2/dataset/a2d2-audi-autonomous-driving-dataset.pdf>
+- measurable segmentation quality, including per-class IoU;
+- visibly correct camera-LiDAR projection;
+- correct metric placement and semantic costs;
+- conservative interaction with raw LiDAR obstacles;
+- repeatable ROS 2/Nav2 playback;
+- measured end-to-end latency and update rate.
