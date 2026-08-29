@@ -1,0 +1,90 @@
+version: 2
+ignore_id: 255
+
+groups:
+  drivable:
+    train_id: 0
+    costmap_cost: 0
+    classes:
+      - Solid line
+      - Drivable cobblestone
+      - Painted driv. instr.
+      - Dashed line
+      - RD normal street
+
+  caution:
+    train_id: 1
+    costmap_cost: 80
+    classes:
+      - Speed bumper
+      - Zebra crossing
+      - Slow drive area
+      - Parking area
+
+  non_drivable:
+    train_id: 2
+    costmap_cost: 220
+    classes:
+      - Curbstone
+      - Non-drivable street
+      - RD restricted area
+      - Nature object
+      - Sidewalk
+
+  static_obstacle:
+    train_id: 3
+    costmap_cost: 254
+    classes:
+      - Traffic signal 1
+      - Traffic signal 2
+      - Traffic signal 3
+      - Traffic sign 1
+      - Traffic sign 2
+      - Traffic sign 3
+      - Sidebars
+      - Irrelevant signs
+      - Road blocks
+      - Obstacles / trash
+      - Poles
+      - Grid structure
+      - Signal corpus
+      - Electronic traffic
+      - Traffic guide obj.
+      - Buildings
+
+  dynamic_obstacle:
+    train_id: 4
+    costmap_cost: 254
+    classes:
+      - Car 1
+      - Car 2
+      - Car 3
+      - Car 4
+      - Bicycle 1
+      - Bicycle 2
+      - Bicycle 3
+      - Bicycle 4
+      - Pedestrian 1
+      - Pedestrian 2
+      - Pedestrian 3
+      - Truck 1
+      - Truck 2
+      - Truck 3
+      - Small vehicles 1
+      - Small vehicles 2
+      - Small vehicles 3
+      - Utility vehicle 1
+      - Utility vehicle 2
+      - Tractor
+      - Animals
+
+  background:
+    train_id: 5
+    costmap_cost: null
+    classes:
+      - Sky
+
+ignore:
+  - Ego car
+  - Blurred area
+  - Rain dirt

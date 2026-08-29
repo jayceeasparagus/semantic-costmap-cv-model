@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "semantic-costmap-cv-model"
+version = "0.1.0"
+description = "Semantic segmentation and sensor-fusion pipeline for navigation costmaps"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "Pillow>=9.0",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+train = [
+  "matplotlib>=3.7",
+  "torch>=2.2",
+  "torchvision>=0.17",
+]
+test = [
+  "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"
