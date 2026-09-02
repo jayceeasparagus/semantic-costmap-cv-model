@@ -163,7 +163,8 @@ def build_semantic_costmap(
     )
 
 
-def _costmap_rgb(costs: np.ndarray) -> np.ndarray:
+def costmap_to_rgb(costs: np.ndarray) -> np.ndarray:
+    """Convert a raw cost grid into a human-readable RGB image."""
     image = np.empty((*costs.shape, 3), dtype=np.uint8)
     unknown = costs == UNKNOWN_COST
     lethal = costs == LETHAL_COST
@@ -202,7 +203,7 @@ def save_costmap(
         **asdict(costmap.config),
     )
     Image.fromarray(np.flipud(costmap.costs), mode="L").save(pgm_path)
-    Image.fromarray(_costmap_rgb(costmap.costs), mode="RGB").save(preview_path)
+    Image.fromarray(costmap_to_rgb(costmap.costs), mode="RGB").save(preview_path)
     metadata = {
         "image": pgm_path.name,
         "mode": "raw",
