@@ -8,3 +8,10 @@ semantic_costmap_node:
     forward_range: 50.0
     side_range: 20.0
     minimum_confidence: 0.50
+
+semantic_map_accumulator:
+  ros__parameters:
+    map_frame: map
+    resolution: 0.20
+    map_range: 50.0
+    dynamic_decay_seconds: 2.0

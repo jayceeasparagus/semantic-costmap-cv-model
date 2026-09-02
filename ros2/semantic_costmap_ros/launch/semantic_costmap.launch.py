@@ -16,6 +16,13 @@ def generate_launch_description():
                 name="semantic_costmap_node",
                 output="screen",
                 parameters=[parameters],
-            )
+            ),
+            Node(
+                package="semantic_costmap_ros",
+                executable="semantic_map_accumulator",
+                name="semantic_map_accumulator",
+                output="screen",
+                parameters=[parameters],
+            ),
         ]
     )

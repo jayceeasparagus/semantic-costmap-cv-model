@@ -23,6 +23,7 @@ setup(
     entry_points={
         "console_scripts": [
             "semantic_costmap_node = semantic_costmap_ros.semantic_costmap_node:main",
+            "semantic_map_accumulator = semantic_costmap_ros.semantic_map_accumulator_node:main",
         ],
     },
 )
