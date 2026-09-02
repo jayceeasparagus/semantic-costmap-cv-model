@@ -31,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--disable-ground-interpolation", action="store_true")
     parser.add_argument("--ground-interpolation-iterations", type=int, default=2)
     parser.add_argument("--ground-interpolation-min-neighbors", type=int, default=3)
+    parser.add_argument("--obstacle-marking-radius", type=float, default=0.30)
     return parser.parse_args()
 
 
@@ -46,6 +47,7 @@ def load_painted_cloud(path: Path) -> PaintedPointCloud:
         rows=data["rows"],
         columns=data["columns"],
         source_indices=data["source_indices"],
+        lidar_ids=data["lidar_ids"] if "lidar_ids" in data else None,
     )
 
 
@@ -68,6 +70,7 @@ def main() -> None:
         ground_interpolation_min_neighbors=(
             args.ground_interpolation_min_neighbors
         ),
+        obstacle_marking_radius_m=args.obstacle_marking_radius,
     )
     costmap = build_semantic_costmap(
         painted,
@@ -81,8 +84,12 @@ def main() -> None:
     print(f"Resolution: {config.resolution:.2f} m/cell")
     print(f"Known cells: {known.sum()}")
     print(f"Lethal obstacle cells: {costmap.obstacle_mask.sum()}")
-    raytraced = (costmap.costs == 0) & (costmap.evidence_count == 0)
-    print(f"Raytraced/interpolated free cells: {raytraced.sum()}")
+    print(
+        "Observed free cells:",
+        int(costmap.observed_free_mask.sum()),
+        "Interpolated free cells:",
+        int(costmap.interpolated_free_mask.sum()),
+    )
     if known.any():
         print(f"Known cost range: {costmap.costs[known].min()}-{costmap.costs[known].max()}")
     for name, path in paths.items():

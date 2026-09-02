@@ -111,6 +111,8 @@ def test_raytracing_marks_cells_before_return_without_clearing_endpoint():
 
     assert np.all(result.costs[1, 0:4] == 0)
     assert result.costs[1, 4] == LETHAL_COST
+    assert np.all(result.class_ids[1, 0:4] == 4)
+    assert np.all(result.observed_free_mask[1, 0:4])
 
 
 def test_raytracing_does_not_lower_semantic_hazard():
@@ -160,3 +162,55 @@ def test_ground_interpolation_fills_only_surrounded_unknown_cells():
     assert result.costs[1, 1] == 0
     assert result.class_ids[1, 1] == 0
     assert result.costs[2, 1] == UNKNOWN_COST
+
+
+def test_raytracing_starts_at_calibrated_origin():
+    config = CostmapConfig(
+        resolution=1.0,
+        x_min=0.0,
+        x_max=6.0,
+        y_min=-1.0,
+        y_max=1.0,
+        obstacle_z_min=0.0,
+        obstacle_z_max=1.0,
+        ground_interpolation_iterations=0,
+    )
+    cloud = make_cloud(
+        [[4.2, 0.2, 0.5]],
+        [[0.0, 0.0, 1.0, 0.0, 0.0]],
+    )
+
+    result = build_semantic_costmap(
+        cloud,
+        config,
+        raytrace_origin_vehicle=np.array([1.5, 0.0, 0.0]),
+    )
+
+    assert result.costs[1, 0] == UNKNOWN_COST
+    assert np.all(result.costs[1, 1:4] == 0)
+    assert result.costs[1, 4] == LETHAL_COST
+
+
+def test_obstacle_marking_expands_sparse_returns():
+    config = CostmapConfig(
+        resolution=0.2,
+        x_min=0.0,
+        x_max=4.0,
+        y_min=-2.0,
+        y_max=2.0,
+        obstacle_z_min=0.0,
+        obstacle_z_max=1.0,
+        raytrace_free_space=False,
+        ground_interpolation_iterations=0,
+        obstacle_marking_radius_m=0.3,
+    )
+    cloud = make_cloud(
+        [[2.1, 0.0, 0.5]],
+        [[0.0, 0.0, 1.0, 0.0, 0.0]],
+    )
+
+    result = build_semantic_costmap(cloud, config)
+
+    assert result.obstacle_seed_mask[10, 10]
+    assert result.obstacle_mask[9, 10]
+    assert result.costs[9, 10] == LETHAL_COST

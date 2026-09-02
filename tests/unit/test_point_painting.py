@@ -60,3 +60,27 @@ def test_paint_points_rejects_mismatched_frames():
         assert "equal shape" in str(error)
     else:
         raise AssertionError("mismatched point frames should fail")
+
+
+def test_paint_points_preserves_lidar_ids_for_valid_points():
+    segmentation = SegmentationResult(
+        class_ids=np.zeros((1, 2), dtype=np.uint8),
+        probabilities=np.array([[[1.0, 1.0]], [[0.0, 0.0]], [[0.0, 0.0]], [[0.0, 0.0]], [[0.0, 0.0]]], dtype=np.float32),
+        confidence=np.ones((1, 2), dtype=np.float32),
+    )
+    projection = ProjectionResult(
+        rows=np.array([0.0, 0.0, 0.0]),
+        columns=np.array([0.0, 1.0, 2.0]),
+        depth=np.array([1.0, 1.0, 1.0]),
+        valid=np.array([True, True, False]),
+    )
+
+    painted = paint_points(
+        np.ones((3, 3)),
+        np.ones((3, 3)),
+        projection,
+        segmentation,
+        lidar_ids=np.array([2, 4, 7]),
+    )
+
+    np.testing.assert_array_equal(painted.lidar_ids, [2, 4])

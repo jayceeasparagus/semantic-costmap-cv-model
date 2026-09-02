@@ -76,6 +76,7 @@ def main() -> None:
         points_vehicle,
         projection,
         segmentation,
+        lidar_ids=lidar["lidar_id"] if "lidar_id" in lidar else None,
     )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)

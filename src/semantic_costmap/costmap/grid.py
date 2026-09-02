@@ -32,6 +32,7 @@ class CostmapConfig:
     raytrace_max_range: float = 50.0
     ground_interpolation_iterations: int = 2
     ground_interpolation_min_neighbors: int = 3
+    obstacle_marking_radius_m: float = 0.30
 
     @property
     def width(self) -> int:
@@ -54,6 +55,8 @@ class CostmapConfig:
             raise ValueError("ground_interpolation_iterations cannot be negative")
         if not 1 <= self.ground_interpolation_min_neighbors <= 8:
             raise ValueError("ground_interpolation_min_neighbors must be 1-8")
+        if self.obstacle_marking_radius_m < 0.0:
+            raise ValueError("obstacle_marking_radius_m cannot be negative")
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,10 @@ class SemanticCostmap:
     evidence_count: np.ndarray
     obstacle_mask: np.ndarray
     config: CostmapConfig
+    semantic_mask: np.ndarray | None = None
+    interpolated_free_mask: np.ndarray | None = None
+    observed_free_mask: np.ndarray | None = None
+    obstacle_seed_mask: np.ndarray | None = None
 
 
 def _cell_indices(
@@ -124,11 +131,15 @@ def _interpolate_drivable_cells(
 def _raytraced_free_mask(
     raw_points_vehicle: np.ndarray,
     config: CostmapConfig,
+    origin_vehicle: np.ndarray,
 ) -> np.ndarray:
     """Mark cells traversed before each LiDAR return as observed free space."""
 
     mask = np.zeros((config.height, config.width), dtype=bool)
-    origin = np.array([[0.0, 0.0, 0.0]])
+    origin_vehicle = np.asarray(origin_vehicle, dtype=np.float64)
+    if origin_vehicle.shape != (3,) or not np.isfinite(origin_vehicle).all():
+        raise ValueError("origin_vehicle must contain three finite values")
+    origin = origin_vehicle.reshape(1, 3)
     start_rows, start_columns, origin_valid = _cell_indices(origin, config)
     if not origin_valid[0]:
         return mask
@@ -136,12 +147,17 @@ def _raytraced_free_mask(
     endpoints = np.asarray(raw_points_vehicle[:, :2], dtype=np.float64)
     finite = np.isfinite(endpoints).all(axis=1)
     endpoints = endpoints[finite]
-    distances = np.linalg.norm(endpoints, axis=1)
-    endpoints = endpoints[distances > 1e-9]
-    distances = distances[distances > 1e-9]
-    endpoints *= np.minimum(1.0, config.raytrace_max_range / distances)[:, None]
+    origin_xy = origin_vehicle[:2]
+    directions = endpoints - origin_xy
+    distances = np.linalg.norm(directions, axis=1)
+    usable = distances > 1e-9
+    directions = directions[usable]
+    distances = distances[usable]
+    endpoints = origin_xy + directions * np.minimum(
+        1.0, config.raytrace_max_range / distances
+    )[:, None]
 
-    # Clip all rays to the rectangular grid. The sensor origin is (0, 0).
+    # Clip all rays to the rectangular grid from the calibrated origin.
     clipping_scale = np.ones(len(endpoints), dtype=np.float64)
     epsilon = config.resolution * 1e-6
     limits = (
@@ -149,19 +165,19 @@ def _raytraced_free_mask(
         (1, config.y_min + epsilon, config.y_max - epsilon),
     )
     for axis, lower, upper in limits:
-        component = endpoints[:, axis]
+        component = directions[:, axis]
         positive = component > 0.0
         negative = component < 0.0
         clipping_scale[positive] = np.minimum(
             clipping_scale[positive],
-            upper / component[positive],
+            (upper - origin_xy[axis]) / component[positive],
         )
         clipping_scale[negative] = np.minimum(
             clipping_scale[negative],
-            lower / component[negative],
+            (lower - origin_xy[axis]) / component[negative],
         )
     usable = clipping_scale > 0.0
-    endpoints = endpoints[usable] * clipping_scale[usable, None]
+    endpoints = origin_xy + directions[usable] * clipping_scale[usable, None]
 
     endpoint_xyz = np.column_stack((endpoints, np.zeros(len(endpoints))))
     end_rows, end_columns, endpoint_valid = _cell_indices(endpoint_xyz, config)
@@ -194,6 +210,7 @@ def build_semantic_costmap(
     painted: PaintedPointCloud,
     config: CostmapConfig | None = None,
     raw_points_vehicle: np.ndarray | None = None,
+    raytrace_origin_vehicle: np.ndarray | None = None,
 ) -> SemanticCostmap:
     """Aggregate semantic probabilities and conservative LiDAR obstacles."""
 
@@ -235,6 +252,7 @@ def build_semantic_costmap(
         )
 
     populated = evidence >= config.minimum_points_per_cell
+    semantic_mask = populated.copy()
     costs = np.full(shape, UNKNOWN_COST, dtype=np.uint8)
     class_ids = np.full(shape, BACKGROUND_CLASS_ID, dtype=np.uint8)
     if populated.any():
@@ -250,12 +268,16 @@ def build_semantic_costmap(
         costs[populated] = np.rint(weighted_cost).astype(np.uint8)
 
     if config.ground_interpolation_iterations > 0:
+        before_interpolation = costs == UNKNOWN_COST
         _interpolate_drivable_cells(
             costs,
             class_ids,
             config.ground_interpolation_iterations,
             config.ground_interpolation_min_neighbors,
         )
+        interpolated_free_mask = before_interpolation & (costs == 0)
+    else:
+        interpolated_free_mask = np.zeros(shape, dtype=bool)
 
     if raw_points_vehicle is None:
         raw_points_vehicle = points
@@ -263,11 +285,19 @@ def build_semantic_costmap(
     if raw_points_vehicle.ndim != 2 or raw_points_vehicle.shape[1] != 3:
         raise ValueError("raw_points_vehicle must have shape (N, 3)")
 
+    if raytrace_origin_vehicle is None:
+        raytrace_origin_vehicle = np.zeros(3, dtype=np.float64)
     if config.raytrace_free_space:
-        free_mask = _raytraced_free_mask(raw_points_vehicle, config)
+        free_mask = _raytraced_free_mask(
+            raw_points_vehicle,
+            config,
+            raytrace_origin_vehicle,
+        )
         newly_observed_free = free_mask & (costs == UNKNOWN_COST)
         costs[newly_observed_free] = 0
-        class_ids[newly_observed_free] = 0
+        observed_free_mask = newly_observed_free
+    else:
+        observed_free_mask = np.zeros(shape, dtype=bool)
 
     obstacle_rows, obstacle_columns, obstacle_in_grid = _cell_indices(
         raw_points_vehicle,
@@ -278,11 +308,16 @@ def build_semantic_costmap(
         & (raw_points_vehicle[:, 2] >= config.obstacle_z_min)
         & (raw_points_vehicle[:, 2] <= config.obstacle_z_max)
     )
-    obstacle_mask = np.zeros(shape, dtype=bool)
-    obstacle_mask[
+    obstacle_seed_mask = np.zeros(shape, dtype=bool)
+    obstacle_seed_mask[
         obstacle_rows[obstacle_points],
         obstacle_columns[obstacle_points],
     ] = True
+    obstacle_mask = _dilate_mask(
+        obstacle_seed_mask,
+        config.obstacle_marking_radius_m,
+        config.resolution,
+    )
     costs[obstacle_mask] = LETHAL_COST
 
     return SemanticCostmap(
@@ -291,10 +326,49 @@ def build_semantic_costmap(
         evidence_count=evidence,
         obstacle_mask=obstacle_mask,
         config=config,
+        semantic_mask=semantic_mask,
+        interpolated_free_mask=interpolated_free_mask,
+        observed_free_mask=observed_free_mask,
+        obstacle_seed_mask=obstacle_seed_mask,
     )
 
 
-def costmap_to_rgb(costs: np.ndarray) -> np.ndarray:
+def _dilate_mask(
+    mask: np.ndarray,
+    radius_m: float,
+    resolution: float,
+) -> np.ndarray:
+    """Expand occupied cells by a circular metric radius."""
+
+    mask = np.asarray(mask, dtype=bool)
+    if radius_m <= 0.0 or not mask.any():
+        return mask.copy()
+    radius_cells = int(np.ceil(radius_m / resolution))
+    offsets = [
+        (row, column)
+        for row in range(-radius_cells, radius_cells + 1)
+        for column in range(-radius_cells, radius_cells + 1)
+        if (row * row + column * column) ** 0.5 <= radius_m / resolution
+    ]
+    expanded = np.zeros_like(mask)
+    source_rows, source_columns = np.nonzero(mask)
+    for row_offset, column_offset in offsets:
+        rows = source_rows + row_offset
+        columns = source_columns + column_offset
+        valid = (
+            (rows >= 0)
+            & (rows < mask.shape[0])
+            & (columns >= 0)
+            & (columns < mask.shape[1])
+        )
+        expanded[rows[valid], columns[valid]] = True
+    return expanded
+
+
+def costmap_to_rgb(
+    costs: np.ndarray,
+    observed_free_mask: np.ndarray | None = None,
+) -> np.ndarray:
     """Convert a raw cost grid into a human-readable RGB image."""
     image = np.empty((*costs.shape, 3), dtype=np.uint8)
     unknown = costs == UNKNOWN_COST
@@ -309,6 +383,11 @@ def costmap_to_rgb(costs: np.ndarray) -> np.ndarray:
         colors[:, 0] = (255 * fraction).astype(np.uint8)
         colors[:, 1] = (200 * (1.0 - fraction)).astype(np.uint8)
         image[known] = colors
+    if observed_free_mask is not None:
+        observed_free_mask = np.asarray(observed_free_mask, dtype=bool)
+        if observed_free_mask.shape != costs.shape:
+            raise ValueError("observed_free_mask must match costs shape")
+        image[observed_free_mask & (costs == 0)] = (0, 150, 220)
     return np.flipud(image)
 
 
@@ -331,10 +410,17 @@ def save_costmap(
         class_ids=costmap.class_ids,
         evidence_count=costmap.evidence_count,
         obstacle_mask=costmap.obstacle_mask,
+        semantic_mask=costmap.semantic_mask,
+        interpolated_free_mask=costmap.interpolated_free_mask,
+        observed_free_mask=costmap.observed_free_mask,
+        obstacle_seed_mask=costmap.obstacle_seed_mask,
         **asdict(costmap.config),
     )
     Image.fromarray(np.flipud(costmap.costs), mode="L").save(pgm_path)
-    Image.fromarray(costmap_to_rgb(costmap.costs), mode="RGB").save(preview_path)
+    Image.fromarray(
+        costmap_to_rgb(costmap.costs, costmap.observed_free_mask),
+        mode="RGB",
+    ).save(preview_path)
     metadata = {
         "image": pgm_path.name,
         "mode": "raw",

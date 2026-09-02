@@ -117,7 +117,10 @@ def render_frame(result: FrameResult, frame_id: str) -> Image.Image:
         draw.point((x, y), fill=color)
 
     costmap = Image.fromarray(
-        costmap_to_rgb(result.costmap.costs),
+        costmap_to_rgb(
+            result.costmap.costs,
+            result.costmap.observed_free_mask,
+        ),
         mode="RGB",
     ).resize(panel_size, Image.Resampling.NEAREST)
 

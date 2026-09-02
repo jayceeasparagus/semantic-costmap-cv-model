@@ -83,6 +83,7 @@ class SemanticCostmapPipeline:
             points_vehicle,
             projection,
             segmentation,
+            lidar_ids=lidar["lidar_id"] if "lidar_id" in lidar else None,
         )
         fusion_ms = (time.perf_counter() - start) * 1000.0
 
@@ -91,6 +92,7 @@ class SemanticCostmapPipeline:
             painted,
             self.costmap_config,
             raw_points_vehicle=points_vehicle,
+            raytrace_origin_vehicle=self.calibration.origin_vehicle,
         )
         costmap_ms = (time.perf_counter() - start) * 1000.0
         total_ms = (time.perf_counter() - start_total) * 1000.0

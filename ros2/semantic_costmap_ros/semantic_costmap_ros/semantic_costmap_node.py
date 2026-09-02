@@ -168,6 +168,7 @@ class SemanticCostmapNode(Node):
                 painted,
                 self.costmap_config,
                 raw_points_vehicle=points_base,
+                raytrace_origin_vehicle=source_to_base[:3, 3],
             )
         except (TransformException, ValueError) as error:
             self.get_logger().warning(f"Point-cloud fusion failed: {error}")

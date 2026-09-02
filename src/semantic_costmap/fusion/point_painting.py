@@ -23,6 +23,7 @@ class PaintedPointCloud:
     rows: np.ndarray
     columns: np.ndarray
     source_indices: np.ndarray
+    lidar_ids: np.ndarray | None = None
 
 
 def paint_points(
@@ -30,6 +31,7 @@ def paint_points(
     points_vehicle: np.ndarray,
     projection: ProjectionResult,
     segmentation: SegmentationResult,
+    lidar_ids: np.ndarray | None = None,
 ) -> PaintedPointCloud:
     """Sample segmentation probabilities at each valid projected LiDAR point."""
 
@@ -45,6 +47,10 @@ def paint_points(
         raise ValueError("segmentation class IDs must have shape (H, W)")
     if segmentation.probabilities.ndim != 3:
         raise ValueError("segmentation probabilities must have shape (C, H, W)")
+    if lidar_ids is not None:
+        lidar_ids = np.asarray(lidar_ids)
+        if lidar_ids.ndim != 1 or len(lidar_ids) != len(points_camera):
+            raise ValueError("lidar_ids must have one value per input point")
 
     height, width = segmentation.class_ids.shape
     valid = projection.valid.copy()
@@ -69,6 +75,7 @@ def paint_points(
         rows=rows,
         columns=columns,
         source_indices=source_indices,
+        lidar_ids=None if lidar_ids is None else lidar_ids[valid],
     )
 
 def save_painted_cloud(path: str | Path, cloud: PaintedPointCloud) -> None:
@@ -76,8 +83,7 @@ def save_painted_cloud(path: str | Path, cloud: PaintedPointCloud) -> None:
 
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        output_path,
+    arrays = dict(
         points_camera=cloud.points_camera,
         points_vehicle=cloud.points_vehicle,
         probabilities=cloud.probabilities,
@@ -88,3 +94,6 @@ def save_painted_cloud(path: str | Path, cloud: PaintedPointCloud) -> None:
         columns=cloud.columns,
         source_indices=cloud.source_indices,
     )
+    if cloud.lidar_ids is not None:
+        arrays["lidar_ids"] = cloud.lidar_ids
+    np.savez_compressed(output_path, **arrays)

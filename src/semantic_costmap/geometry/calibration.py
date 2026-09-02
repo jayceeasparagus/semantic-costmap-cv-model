@@ -16,6 +16,7 @@ class CameraCalibration:
     resolution: tuple[int, int]
     view: dict
     vehicle_view: dict
+    origin_vehicle: np.ndarray
 
 
 def view_axes(view: dict) -> np.ndarray:
@@ -95,4 +96,5 @@ def load_a2d2_calibration(
         resolution=resolution,
         view=camera["view"],
         vehicle_view=vehicle_view,
+        origin_vehicle=transform_to_vehicle(camera["view"])[:3, 3].copy(),
     )
