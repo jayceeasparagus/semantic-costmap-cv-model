@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+build
+build_ros
+install
+install_ros
+log
+log_ros*
+data
+outputs
+.ipynb_checkpoints

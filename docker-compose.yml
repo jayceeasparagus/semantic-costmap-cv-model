@@ -1,0 +1,12 @@
+services:
+  semantic-costmap:
+    build: .
+    network_mode: host
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./outputs:/workspace/outputs
+    command:
+      - ros2
+      - launch
+      - semantic_costmap_ros
+      - semantic_costmap.launch.py
