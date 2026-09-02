@@ -125,10 +125,21 @@ the custom plugin.
 
 ## 8. Pose and SLAM accumulation
 
-SLAM Toolbox remains an upstream pose provider; this project does not implement
-scan matching or loop closure. The accumulator looks up the observation pose
-through the standard `map -> odom -> base_link` TF chain and places each local
-observation into a global metric grid.
+`tools/build_a2d2_poses.py` reads the actual A2D2 list-of-frame-records bus JSON.
+It aligns `vehicle_speed` and `angular_velocity_omega_z` to each camera
+timestamp, converts km/h and degrees/s to SI units, and integrates a planar
+unicycle model. The output is explicitly **bus-derived odometry**, not SLAM
+ground truth. A camera metadata directory can be supplied so `cam_tstamp` is
+used instead of the bus record timestamp. The initial yaw is an explicit
+assumption because GPS samples alone do not provide a reliable local heading
+in this small replay.
+
+SLAM Toolbox remains an upstream pose provider for the ROS path; this project
+does not implement scan matching or loop closure. The accumulator looks up the
+observation pose through the standard `map -> odom -> base_link` TF chain and
+places each local observation into a global metric grid. Offline playback can
+consume the generated CSV and saves both `accumulated_costmap_preview.png` and
+`odometry_trajectory.png`.
 
 Static evidence uses maximum-cost persistence. Dynamic-obstacle evidence is
 stored separately and expires after a configurable timeout, revealing any

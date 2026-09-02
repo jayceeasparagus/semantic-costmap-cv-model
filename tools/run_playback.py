@@ -15,6 +15,7 @@ from semantic_costmap.pipeline import SemanticCostmapPipeline
 from semantic_costmap.playback import (
     discover_frame_pairs,
     load_pose_csv,
+    render_trajectory,
     render_frame,
     summarize_timings,
 )
@@ -142,10 +143,14 @@ def main() -> None:
         Image.fromarray(costmap_to_rgb(accumulated), mode="RGB").save(
             accumulated_preview
         )
+        trajectory_preview = args.output_dir / "odometry_trajectory.png"
+        trajectory_image = render_trajectory(list(pose_records.values()))
+        trajectory_image.save(trajectory_preview)
         benchmark["accumulation"] = {
             "pose_source": str(args.poses_csv),
             "known_cells": int((accumulated != 255).sum()),
             "preview": str(accumulated_preview),
+            "trajectory_preview": str(trajectory_preview),
         }
     benchmark_path = args.output_dir / "benchmark.json"
     benchmark_path.write_text(json.dumps(benchmark, indent=2) + "\n")
@@ -161,6 +166,7 @@ def main() -> None:
     if accumulator is not None:
         print(f"Saved accumulated map: {accumulated_arrays}")
         print(f"Saved accumulated preview: {accumulated_preview}")
+        print(f"Saved trajectory preview: {trajectory_preview}")
 
 
 if __name__ == "__main__":
