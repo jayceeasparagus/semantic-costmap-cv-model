@@ -8,6 +8,10 @@ semantic_costmap_node:
     forward_range: 50.0
     side_range: 20.0
     minimum_confidence: 0.50
+    raytrace_free_space: true
+    raytrace_max_range: 50.0
+    ground_interpolation_iterations: 2
+    ground_interpolation_min_neighbors: 3
 
 semantic_map_accumulator:
   ros__parameters:

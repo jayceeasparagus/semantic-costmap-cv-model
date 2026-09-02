@@ -41,6 +41,10 @@ class SemanticCostmapNode(Node):
         self.declare_parameter("forward_range", 50.0)
         self.declare_parameter("side_range", 20.0)
         self.declare_parameter("minimum_confidence", 0.50)
+        self.declare_parameter("raytrace_free_space", True)
+        self.declare_parameter("raytrace_max_range", 50.0)
+        self.declare_parameter("ground_interpolation_iterations", 2)
+        self.declare_parameter("ground_interpolation_min_neighbors", 3)
 
         checkpoint_path = Path(
             self.get_parameter("checkpoint_path").get_parameter_value().string_value
@@ -57,6 +61,18 @@ class SemanticCostmapNode(Node):
             y_max=side_range,
             minimum_confidence=float(
                 self.get_parameter("minimum_confidence").value
+            ),
+            raytrace_free_space=bool(
+                self.get_parameter("raytrace_free_space").value
+            ),
+            raytrace_max_range=float(
+                self.get_parameter("raytrace_max_range").value
+            ),
+            ground_interpolation_iterations=int(
+                self.get_parameter("ground_interpolation_iterations").value
+            ),
+            ground_interpolation_min_neighbors=int(
+                self.get_parameter("ground_interpolation_min_neighbors").value
             ),
         )
 

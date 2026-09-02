@@ -11,7 +11,13 @@ setup(
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
         (f"share/{package_name}/launch", ["launch/semantic_costmap.launch.py"]),
-        (f"share/{package_name}/config", ["config/semantic_costmap.yaml"]),
+        (
+            f"share/{package_name}/config",
+            [
+                "config/semantic_costmap.yaml",
+                "config/nav2_semantic_layers.yaml",
+            ],
+        ),
     ],
     install_requires=["setuptools"],
     tests_require=["pytest"],
