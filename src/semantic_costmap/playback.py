@@ -1,5 +1,6 @@
-"""A2D2 frame pairing, playback rendering, and benchmark summaries."""
+"""A2D2 frame pairing, playback rendering, and pose-aware summaries."""
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -9,6 +10,7 @@ from PIL import Image, ImageDraw
 
 from semantic_costmap.config import class_colors
 from semantic_costmap.costmap import costmap_to_rgb
+from semantic_costmap.mapping import Pose2D
 from semantic_costmap.pipeline import FrameResult
 
 
@@ -20,6 +22,13 @@ class FramePair:
     frame_id: str
     image_path: Path
     lidar_path: Path
+
+
+@dataclass(frozen=True)
+class PoseRecord:
+    frame_id: str
+    pose: Pose2D
+    timestamp: float
 
 
 def _frame_id(path: Path) -> str | None:
@@ -49,6 +58,36 @@ def discover_frame_pairs(
         FramePair(frame_id, images[frame_id], lidars[frame_id])
         for frame_id in sorted(images.keys() & lidars.keys())
     ]
+
+
+def load_pose_csv(path: str | Path) -> dict[str, PoseRecord]:
+    """Load timestamped map-to-base planar poses keyed by A2D2 frame ID."""
+
+    records = {}
+    with Path(path).open(newline="") as stream:
+        reader = csv.DictReader(stream)
+        required = {"frame_id", "timestamp", "x", "y", "yaw"}
+        missing = required - set(reader.fieldnames or ())
+        if missing:
+            raise ValueError(
+                "pose CSV is missing columns: " + ", ".join(sorted(missing))
+            )
+        for row in reader:
+            frame_id = row["frame_id"].strip().zfill(9)
+            if frame_id in records:
+                raise ValueError(f"duplicate pose for frame {frame_id}")
+            records[frame_id] = PoseRecord(
+                frame_id=frame_id,
+                pose=Pose2D(
+                    x=float(row["x"]),
+                    y=float(row["y"]),
+                    yaw=float(row["yaw"]),
+                ),
+                timestamp=float(row["timestamp"]),
+            )
+    if not records:
+        raise ValueError("pose CSV contains no poses")
+    return records
 
 
 def render_frame(result: FrameResult, frame_id: str) -> Image.Image:
