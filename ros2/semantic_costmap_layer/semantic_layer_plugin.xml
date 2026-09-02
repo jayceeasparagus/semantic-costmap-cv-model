@@ -1,0 +1,10 @@
+<library path="semantic_costmap_layer">
+  <class
+    name="semantic_costmap_layer/SemanticCostmapLayer"
+    type="semantic_costmap_layer::SemanticCostmapLayer"
+    base_class_type="nav2_costmap_2d::Layer">
+    <description>
+      Merges semantic OccupancyGrid costs into a Nav2 master costmap.
+    </description>
+  </class>
+</library>

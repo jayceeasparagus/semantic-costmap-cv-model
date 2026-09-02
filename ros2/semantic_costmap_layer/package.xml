@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>semantic_costmap_layer</name>
+  <version>0.1.0</version>
+  <description>Nav2 layer that merges semantic occupancy costs.</description>
+  <maintainer email="jayce@example.com">Jayce</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_costmap_2d</depend>
+  <depend>pluginlib</depend>
+  <depend>tf2</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <nav2_costmap_2d plugin="${prefix}/semantic_layer_plugin.xml" />
+  </export>
+</package>
