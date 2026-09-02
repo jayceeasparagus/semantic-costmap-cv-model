@@ -3,7 +3,7 @@
   <name>semantic_costmap_layer</name>
   <version>0.1.0</version>
   <description>Nav2 layer that merges semantic occupancy costs.</description>
-  <maintainer email="jayce@example.com">Jayce</maintainer>
+  <maintainer email="jayceeasparagus@users.noreply.github.com">Jayce</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

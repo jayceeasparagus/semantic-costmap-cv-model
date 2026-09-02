@@ -3,7 +3,7 @@
   <name>semantic_costmap_ros</name>
   <version>0.1.0</version>
   <description>ROS 2 wrapper for camera-LiDAR semantic costmap generation.</description>
-  <maintainer email="jayce@example.com">Jayce</maintainer>
+  <maintainer email="jayceeasparagus@users.noreply.github.com">Jayce</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

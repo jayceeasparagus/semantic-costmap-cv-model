@@ -17,7 +17,7 @@ setup(
     tests_require=["pytest"],
     zip_safe=True,
     maintainer="Jayce",
-    maintainer_email="jayce@example.com",
+    maintainer_email="jayceeasparagus@users.noreply.github.com",
     description="ROS 2 semantic costmap perception node",
     license="MIT",
     entry_points={
