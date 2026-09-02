@@ -22,3 +22,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: requires the local A2D2 sample and trained checkpoint",
+]
