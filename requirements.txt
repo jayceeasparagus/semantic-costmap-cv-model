@@ -3,3 +3,4 @@ Pillow>=9.0
 matplotlib>=3.7
 torch>=2.10
 pytest>=8
+PyYAML>=6.0
