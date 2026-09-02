@@ -143,6 +143,40 @@ def render_frame(result: FrameResult, frame_id: str) -> Image.Image:
     return canvas
 
 
+def render_trajectory(records: list[PoseRecord]) -> Image.Image:
+    """Render the vehicle path used to place local maps globally."""
+
+    if not records:
+        raise ValueError("at least one pose record is required")
+
+    width, height, margin = 800, 600, 50
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    points = [(record.pose.x, record.pose.y) for record in records]
+    x_values, y_values = zip(*points)
+    x_min, x_max = min(x_values), max(x_values)
+    y_min, y_max = min(y_values), max(y_values)
+    x_span = max(x_max - x_min, 1.0)
+    y_span = max(y_max - y_min, 1.0)
+
+    def to_pixel(point: tuple[float, float]) -> tuple[int, int]:
+        x, y = point
+        pixel_x = margin + int((x - x_min) / x_span * (width - 2 * margin))
+        pixel_y = height - margin - int((y - y_min) / y_span * (height - 2 * margin))
+        return pixel_x, pixel_y
+
+    pixel_points = [to_pixel(point) for point in points]
+    if len(pixel_points) > 1:
+        draw.line(pixel_points, fill=(30, 100, 220), width=4)
+    draw.ellipse((*tuple(value - 6 for value in pixel_points[0]),
+                  *tuple(value + 6 for value in pixel_points[0])), fill=(20, 150, 40))
+    draw.ellipse((*tuple(value - 6 for value in pixel_points[-1]),
+                  *tuple(value + 6 for value in pixel_points[-1])), fill=(210, 50, 40))
+    draw.text((margin, 15), "Pose trajectory used for map accumulation", fill="black")
+    draw.text((margin, height - 30), f"x: {x_min:.1f} to {x_max:.1f} m | y: {y_min:.1f} to {y_max:.1f} m", fill="black")
+    return image
+
+
 def summarize_timings(frame_timings: list[dict[str, float]]) -> dict:
     if not frame_timings:
         raise ValueError("at least one frame timing is required")

@@ -3,10 +3,13 @@ from pathlib import Path
 import pytest
 
 from semantic_costmap.playback import (
+    PoseRecord,
     discover_frame_pairs,
     load_pose_csv,
+    render_trajectory,
     summarize_timings,
 )
+from semantic_costmap.mapping import Pose2D
 
 
 def test_discover_frame_pairs_keeps_only_matching_ids(tmp_path: Path):
@@ -59,3 +62,14 @@ def test_load_pose_csv_rejects_missing_pose_fields(tmp_path: Path):
 
     with pytest.raises(ValueError, match="missing columns"):
         load_pose_csv(pose_path)
+
+
+def test_render_trajectory_creates_image():
+    image = render_trajectory(
+        [
+            PoseRecord("1", Pose2D(0.0, 0.0, 0.0), 0.0),
+            PoseRecord("2", Pose2D(2.0, 1.0, 0.1), 1.0),
+        ]
+    )
+
+    assert image.size == (800, 600)
