@@ -121,66 +121,6 @@ def _interpolate_drivable_cells(
         drivable |= fill
 
 
-def _bresenham_cells(
-    start_row: int,
-    start_column: int,
-    end_row: int,
-    end_column: int,
-) -> list[tuple[int, int]]:
-    """Return grid cells crossed by a two-dimensional integer line."""
-
-    cells = []
-    column = start_column
-    row = start_row
-    delta_column = abs(end_column - start_column)
-    delta_row = abs(end_row - start_row)
-    column_step = 1 if start_column < end_column else -1
-    row_step = 1 if start_row < end_row else -1
-    error = delta_column - delta_row
-
-    while True:
-        cells.append((row, column))
-        if row == end_row and column == end_column:
-            break
-        doubled_error = 2 * error
-        if doubled_error > -delta_row:
-            error -= delta_row
-            column += column_step
-        if doubled_error < delta_column:
-            error += delta_column
-            row += row_step
-    return cells
-
-
-def _clip_ray_endpoint(
-    endpoint: np.ndarray,
-    config: CostmapConfig,
-) -> np.ndarray | None:
-    """Clip a ray from the vehicle origin to the map and range boundaries."""
-
-    delta = np.asarray(endpoint[:2], dtype=np.float64)
-    distance = np.linalg.norm(delta)
-    if not np.isfinite(distance) or distance <= 1e-9:
-        return None
-    delta *= min(1.0, config.raytrace_max_range / distance)
-
-    # The vehicle origin is (0, 0). Find the first map boundary hit by the ray.
-    scale = 1.0
-    epsilon = config.resolution * 1e-6
-    limits = (
-        (delta[0], config.x_min + epsilon, config.x_max - epsilon),
-        (delta[1], config.y_min + epsilon, config.y_max - epsilon),
-    )
-    for component, lower, upper in limits:
-        if component > 0.0:
-            scale = min(scale, upper / component)
-        elif component < 0.0:
-            scale = min(scale, lower / component)
-    if scale <= 0.0:
-        return None
-    return delta * scale
-
-
 def _raytraced_free_mask(
     raw_points_vehicle: np.ndarray,
     config: CostmapConfig,
@@ -193,29 +133,60 @@ def _raytraced_free_mask(
     if not origin_valid[0]:
         return mask
 
-    endpoints = set()
-    for point in raw_points_vehicle:
-        endpoint = _clip_ray_endpoint(point, config)
-        if endpoint is None:
-            continue
-        rows, columns, valid = _cell_indices(
-            np.array([[endpoint[0], endpoint[1], 0.0]]),
-            config,
+    endpoints = np.asarray(raw_points_vehicle[:, :2], dtype=np.float64)
+    finite = np.isfinite(endpoints).all(axis=1)
+    endpoints = endpoints[finite]
+    distances = np.linalg.norm(endpoints, axis=1)
+    endpoints = endpoints[distances > 1e-9]
+    distances = distances[distances > 1e-9]
+    endpoints *= np.minimum(1.0, config.raytrace_max_range / distances)[:, None]
+
+    # Clip all rays to the rectangular grid. The sensor origin is (0, 0).
+    clipping_scale = np.ones(len(endpoints), dtype=np.float64)
+    epsilon = config.resolution * 1e-6
+    limits = (
+        (0, config.x_min + epsilon, config.x_max - epsilon),
+        (1, config.y_min + epsilon, config.y_max - epsilon),
+    )
+    for axis, lower, upper in limits:
+        component = endpoints[:, axis]
+        positive = component > 0.0
+        negative = component < 0.0
+        clipping_scale[positive] = np.minimum(
+            clipping_scale[positive],
+            upper / component[positive],
         )
-        if valid[0]:
-            endpoints.add((int(rows[0]), int(columns[0])))
+        clipping_scale[negative] = np.minimum(
+            clipping_scale[negative],
+            lower / component[negative],
+        )
+    usable = clipping_scale > 0.0
+    endpoints = endpoints[usable] * clipping_scale[usable, None]
+
+    endpoint_xyz = np.column_stack((endpoints, np.zeros(len(endpoints))))
+    end_rows, end_columns, endpoint_valid = _cell_indices(endpoint_xyz, config)
+    endpoint_cells = np.unique(
+        np.column_stack((end_rows[endpoint_valid], end_columns[endpoint_valid])),
+        axis=0,
+    )
+    if not len(endpoint_cells):
+        return mask
 
     start_row = int(start_rows[0])
     start_column = int(start_columns[0])
-    for end_row, end_column in endpoints:
-        # The endpoint may be an obstacle, so only clear cells before it.
-        for row, column in _bresenham_cells(
-            start_row,
-            start_column,
-            end_row,
-            end_column,
-        )[:-1]:
-            mask[row, column] = True
+    row_delta = endpoint_cells[:, 0] - start_row
+    column_delta = endpoint_cells[:, 1] - start_column
+    step_count = np.maximum(np.abs(row_delta), np.abs(column_delta))
+
+    # Vectorized digital differential analyzer: each loop advances every ray.
+    for step in range(int(step_count.max())):
+        active = step < step_count
+        fraction = step / step_count[active]
+        rows = np.rint(start_row + row_delta[active] * fraction).astype(np.int32)
+        columns = np.rint(
+            start_column + column_delta[active] * fraction
+        ).astype(np.int32)
+        mask[rows, columns] = True
     return mask
 
 
