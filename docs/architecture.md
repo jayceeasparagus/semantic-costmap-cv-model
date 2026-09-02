@@ -18,8 +18,8 @@ Output:
 
 ## 2. Offline model training
 
-A U-Net-style model will be trained from scratch on A2D2 RGB images and reduced
-semantic masks. Its output is a six-channel logit tensor. Softmax converts those
+A U-Net-style model was trained from scratch on A2D2 RGB images and reduced
+semantic masks. Its output is a five-channel logit tensor. Softmax converts those
 logits into a probability for each class at every pixel.
 
 The proposed classes are:
@@ -27,15 +27,14 @@ The proposed classes are:
 | ID | Class | Navigation meaning | Initial cost |
 |---:|---|---|---:|
 | 0 | drivable | preferred surface | 0 |
-| 1 | caution | traversable but less preferred | 80 |
-| 2 | non_drivable | strongly avoid | 220 |
-| 3 | static_obstacle | fixed collision hazard | 254 |
-| 4 | dynamic_obstacle | moving collision hazard | 254 |
-| 5 | background | never add to the grid | none |
+| 1 | non_drivable | strongly avoid | 220 |
+| 2 | static_obstacle | fixed collision hazard | 254 |
+| 3 | dynamic_obstacle | moving collision hazard | 254 |
+| 4 | background | never add to the grid | none |
 
-The exact A2D2-to-model mapping will be implemented only after inspecting class
-counts and examples. That prevents us from locking in a taxonomy that creates
-an unusably rare class.
+The A2D2 label audit removed the earlier `caution` class because it was too rare
+to learn reliably. Keeping five well-supported classes gives the costmap clearer
+and more defensible semantics.
 
 ## 3. Camera-LiDAR connection: semantic point painting
 
@@ -51,7 +50,7 @@ For each LiDAR point:
 3. Project the 3D camera-frame point into image coordinates using the camera
    intrinsics.
 4. Reject points outside the image.
-5. Sample the model's six probabilities at that image pixel.
+5. Sample the model's five probabilities at that image pixel.
 6. Store the 3D point together with its semantic probabilities.
 
 In compact form:
@@ -60,7 +59,7 @@ In compact form:
 p_camera = T_camera_lidar * p_lidar
 u = fx * X / Z + cx
 v = fy * Y / Z + cy
-painted_point = [x, y, z, P(class 0), ..., P(class 5)]
+painted_point = [x, y, z, P(class 0), ..., P(class 4)]
 ```
 
 This is more defensible than estimating distance from the RGB image because the

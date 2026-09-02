@@ -1,182 +1,62 @@
+#!/usr/bin/env python3
+"""Run semantic segmentation on one RGB image."""
+
+import argparse
 from pathlib import Path
 
 import numpy as np
-import torch
 from PIL import Image
 
-from offroad_vision.models.semantic_unet import SemanticUNet
+from semantic_costmap.config import (
+    DEFAULT_CHECKPOINT_PATH,
+    SEMANTIC_CLASSES,
+)
+from semantic_costmap.inference import SemanticSegmenter, colorize_class_ids
 
 
-IMAGE_PATH = Path(
+DEFAULT_IMAGE_PATH = Path(
     "data/raw/a2d2_sample/camera/"
     "20180807145028_camera_frontcenter_000000091.png"
 )
 
-CHECKPOINT_PATH = Path(
-    "outputs/checkpoints/epoch29_restore/"
-    "best_semantic_unet.pt"
-)
 
-OUTPUT_DIR = Path(
-    "outputs/inference"
-)
-
-IMAGE_SIZE = (320, 512)
-
-IMAGE_MEAN = np.array(
-    [0.485, 0.456, 0.406],
-    dtype=np.float32,
-)
-
-IMAGE_STD = np.array(
-    [0.229, 0.224, 0.225],
-    dtype=np.float32,
-)
-
-CLASS_NAMES = [
-    "drivable",
-    "non_drivable",
-    "static_obstacle",
-    "dynamic_obstacle",
-    "background",
-]
-
-CLASS_COLORS = np.array(
-    [
-        [0, 200, 0],
-        [255, 128, 0],
-        [255, 0, 0],
-        [255, 0, 255],
-        [0, 0, 0],
-    ],
-    dtype=np.uint8,
-)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("image", nargs="?", type=Path, default=DEFAULT_IMAGE_PATH)
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT_PATH)
+    parser.add_argument("--output-dir", type=Path, default=Path("outputs/inference"))
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    return parser.parse_args()
 
 
-def main():
-    device = torch.device("cpu")
+def main() -> None:
+    args = parse_args()
+    if not args.image.is_file():
+        raise FileNotFoundError(args.image)
 
-    model = SemanticUNet(
-        num_classes=5,
-        base_channels=32,
-    )
+    image = Image.open(args.image).convert("RGB")
+    segmenter = SemanticSegmenter(args.checkpoint, args.device)
+    result = segmenter.predict(image)
 
-    checkpoint = torch.load(
-        CHECKPOINT_PATH,
-        map_location=device,
-        weights_only=True,
-    )
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    stem = args.image.stem
+    id_path = args.output_dir / f"{stem}_class_ids.png"
+    color_path = args.output_dir / f"{stem}_classes.png"
+    overlay_path = args.output_dir / f"{stem}_overlay.png"
+    confidence_path = args.output_dir / f"{stem}_confidence.png"
 
-    model.load_state_dict(
-        checkpoint["model_state_dict"]
-    )
+    color_mask = Image.fromarray(colorize_class_ids(result.class_ids))
+    Image.fromarray(result.class_ids).save(id_path)
+    color_mask.save(color_path)
+    Image.blend(image, color_mask, alpha=0.45).save(overlay_path)
+    Image.fromarray((result.confidence * 255).astype(np.uint8)).save(confidence_path)
 
-    model.to(device)
-    model.eval()
-
-    original_image = Image.open(
-        IMAGE_PATH
-    ).convert("RGB")
-
-    resized_image = original_image.resize(
-        (IMAGE_SIZE[1], IMAGE_SIZE[0]),
-        Image.Resampling.BILINEAR,
-    )
-
-    image_array = np.asarray(
-        resized_image,
-        dtype=np.float32,
-    ) / 255.0
-
-    image_array = (
-        image_array - IMAGE_MEAN
-    ) / IMAGE_STD
-
-    image_tensor = torch.from_numpy(
-        image_array.transpose(2, 0, 1)
-    ).unsqueeze(0).float().to(device)
-
-    with torch.inference_mode():
-        logits = model(image_tensor)
-        probabilities = torch.softmax(
-            logits,
-            dim=1,
-        )
-
-        prediction = logits.argmax(
-            dim=1
-        )[0].cpu().numpy()
-
-        confidence = probabilities.max(
-            dim=1
-        )[0][0].cpu().numpy()
-
-    predicted_mask = Image.fromarray(
-        prediction.astype(np.uint8),
-        mode="L",
-    ).resize(
-        original_image.size,
-        Image.Resampling.NEAREST,
-    )
-
-    small_color_mask = Image.fromarray(
-        CLASS_COLORS[prediction],
-        mode="RGB",
-    )
-
-    color_mask = small_color_mask.resize(
-        original_image.size,
-        Image.Resampling.NEAREST,
-    )
-
-    overlay = Image.blend(
-        original_image,
-        color_mask,
-        alpha=0.45,
-    )
-
-    confidence_image = Image.fromarray(
-        (confidence * 255).astype(np.uint8),
-        mode="L",
-    ).resize(
-        original_image.size,
-        Image.Resampling.BILINEAR,
-    )
-
-    OUTPUT_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    predicted_mask.save(
-        OUTPUT_DIR / "sample_prediction_ids.png"
-    )
-
-    color_mask.save(
-        OUTPUT_DIR / "sample_prediction_colors.png"
-    )
-
-    overlay.save(
-        OUTPUT_DIR / "sample_prediction_overlay.png"
-    )
-
-    confidence_image.save(
-        OUTPUT_DIR / "sample_prediction_confidence.png"
-    )
-
-    print("Checkpoint epoch:", checkpoint["epoch"])
-    print("Saved outputs to:", OUTPUT_DIR)
-
-    for class_id, class_name in enumerate(CLASS_NAMES):
-        percentage = (
-            np.mean(prediction == class_id)
-            * 100
-        )
-
-        print(
-            f"{class_name}: "
-            f"{percentage:.2f}%"
-        )
+    print("Device:", segmenter.device)
+    print("Checkpoint epoch:", segmenter.epoch)
+    print("Saved outputs to:", args.output_dir)
+    for semantic_class in SEMANTIC_CLASSES:
+        percentage = np.mean(result.class_ids == semantic_class.class_id) * 100.0
+        print(f"{semantic_class.name}: {percentage:.2f}%")
 
 
 if __name__ == "__main__":

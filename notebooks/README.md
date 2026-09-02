@@ -1,15 +1,10 @@
 # Notebooks
 
-The first notebook will be:
+`01_train_segmentation.ipynb` contains the A2D2 training and evaluation
+workflow used to produce the epoch-29 U-Net checkpoint.
 
-```text
-01_train_segmentation.ipynb
-```
+The notebook is useful for retraining or reproducing model metrics, but it is
+not required for normal inference. Stable inference and fusion logic belongs in
+`src/semantic_costmap/` so local tools and ROS 2 nodes can share it.
 
-It will contain clearly labeled sections for environment checks, data loading,
-label inspection, model definition, training, metrics, checkpoint saving, and
-prediction visualization.
-
-The notebook will be created when model work resumes. Once a function becomes
-stable and reusable outside Colab, it can move into a normal Python file rather
-than being duplicated across notebook cells.
+Notebook outputs and model checkpoints are not committed to Git.

@@ -1,80 +1,79 @@
 # Semantic Costmap Perception Pipeline
 
-This project will combine camera semantics with LiDAR geometry to produce a
-navigation costmap for ROS 2 and Nav2.
-
-## What the system will do
+This project combines RGB semantic segmentation with LiDAR geometry to create
+navigation costs for ROS 2 and Nav2.
 
 ```text
-RGB frame -> segmentation model -> per-pixel semantic probabilities
-                                           |
-LiDAR points + camera calibration ----------+
-                                           v
-                              semantically labeled 3D points
-                                           |
-                                           v
-                                 bird's-eye cost grid
-                                           |
-                                           v
-                                      ROS 2 / Nav2
+RGB image -> U-Net -> per-pixel class probabilities
+                                |
+LiDAR + camera calibration -----+-> painted 3D points
+                                      |
+                                      v
+                              bird's-eye cost grid
+                                      |
+                                      v
+                              ROS 2 / Nav2 costmap
 ```
 
-The camera model answers **what a pixel represents**. LiDAR answers **where that
-observation is in 3D**. The costmap converts the fused result into navigation
-meaning such as free, caution, strongly avoided, or lethal.
+The camera predicts **what** is visible. LiDAR measures **where** it is. An
+existing localization or SLAM system supplies poses when observations need to
+be accumulated in a persistent map; this project does not reimplement SLAM.
 
-SLAM is not part of the model. Later, an existing SLAM or localization system
-will provide poses so observations can be placed consistently in the map frame.
+## Semantic classes
 
-## Initial model classes
+The trained model predicts five classes:
 
-The first model will predict six classes:
+| ID | Class | Navigation cost |
+|---:|---|---:|
+| 0 | `drivable` | 0 |
+| 1 | `non_drivable` | 220 |
+| 2 | `static_obstacle` | 254 |
+| 3 | `dynamic_obstacle` | 254 |
+| 4 | `background` | not inserted |
 
-1. `drivable`
-2. `caution`
-3. `non_drivable`
-4. `static_obstacle`
-5. `dynamic_obstacle`
-6. `background`
+`background` includes sky and other image context that has no physical
+costmap location.
 
-`background` includes sky and other visible context that must not enter the
-costmap. These classes are provisional until the A2D2 data audit is complete.
+## Model result
 
-## Repository layout
+The U-Net was trained from scratch on A2D2. The selected epoch-29 checkpoint
+reached 0.8456 navigation mIoU on validation and 0.7966 on the held-out test
+split. Checkpoints are local artifacts and are intentionally ignored by Git.
 
-```text
-configs/       Dataset metadata that the code reads
-docs/          Architecture and project explanations
-notebooks/     Colab training and experiments
-data/          Local datasets; ignored by Git
-outputs/       Checkpoints, figures, and generated maps; ignored by Git
-```
-
-Folders for reusable Python code, ROS 2, tests, and Docker will be added when
-those parts begin. This keeps the repository easy to understand while avoiding
-empty or premature infrastructure.
-
-## Local setup
+## Setup
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev]"
+python -m pytest
 ```
 
-PyTorch is intentionally not pinned yet. Training will run in Colab, whose
-PyTorch build must match its GPU runtime. We will record the working training
-environment when the model notebook is stable.
+Place the trained checkpoint at:
 
-## Development order
+```text
+outputs/checkpoints/epoch29_restore/best_semantic_unet.pt
+```
 
-1. Audit A2D2 labels and build a clean training dataset.
-2. Train and evaluate the RGB segmentation model.
-3. Project synchronized LiDAR points into the camera image.
-4. Attach semantic probabilities to the projected points.
-5. Rasterize those points into a bird's-eye semantic cost grid.
-6. Add temporal placement using supplied poses.
-7. Integrate the grid with ROS 2 and a Nav2 costmap layer.
-8. Add tests, benchmarks, Docker, and final documentation.
+Run one-image inference with:
 
-Current status: repository simplification complete; implementation is paused.
+```bash
+python tools/run_inference.py --device cpu
+```
+
+## Repository layout
+
+```text
+configs/                 Small configuration and calibration files
+docs/                    Architecture and usage documentation
+notebooks/               Training notebook notes
+src/semantic_costmap/    Reusable offline Python pipeline
+tools/                   Runnable command-line demonstrations
+tests/                   Unit and integration tests
+data/                    Local datasets (ignored)
+outputs/                 Generated results and checkpoints (ignored)
+```
+
+The remaining pipeline is implemented in this order: independent calibration
+projection, semantic point painting, costmap generation, multi-frame playback,
+ROS 2/Nav2 integration, pose-aware accumulation, packaging, and documentation.
