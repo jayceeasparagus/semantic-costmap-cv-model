@@ -32,6 +32,15 @@ class FrameResult:
     timings_ms: dict[str, float]
 
 
+def _lidar_field(lidar: np.lib.npyio.NpzFile, name: str) -> np.ndarray | None:
+    """Read a field from either extracted A2D2 LiDAR naming convention."""
+
+    for key in (name, f"pcloud_attr.{name}"):
+        if key in lidar.files:
+            return lidar[key]
+    return None
+
+
 class SemanticCostmapPipeline:
     """Keep the model and calibration loaded while processing many frames."""
 
@@ -57,6 +66,12 @@ class SemanticCostmapPipeline:
         start = time.perf_counter()
         image = Image.open(image_path).convert("RGB")
         lidar = np.load(lidar_path)
+        points = _lidar_field(lidar, "points")
+        if points is None:
+            points = _lidar_field(lidar, "pcloud_points")
+        if points is None:
+            raise KeyError("LiDAR archive must contain points or pcloud_points")
+        lidar_ids = _lidar_field(lidar, "lidar_id")
         load_ms = (time.perf_counter() - start) * 1000.0
         if image.size != self.calibration.resolution:
             raise ValueError("image resolution does not match calibration")
@@ -67,23 +82,23 @@ class SemanticCostmapPipeline:
 
         start = time.perf_counter()
         projection = project_camera_points(
-            lidar["points"],
+            points,
             self.calibration.camera_matrix,
             self.calibration.resolution,
         )
         points_vehicle = transform_points(
-            lidar["points"],
+            points,
             self.camera_to_vehicle,
         )
         projection_ms = (time.perf_counter() - start) * 1000.0
 
         start = time.perf_counter()
         painted = paint_points(
-            lidar["points"],
+            points,
             points_vehicle,
             projection,
             segmentation,
-            lidar_ids=lidar["lidar_id"] if "lidar_id" in lidar else None,
+            lidar_ids=lidar_ids,
         )
         fusion_ms = (time.perf_counter() - start) * 1000.0
 
