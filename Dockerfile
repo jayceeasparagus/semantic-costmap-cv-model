@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-yaml \
     ros-jazzy-navigation2 \
     ros-jazzy-nav2-bringup \
+    ros-jazzy-pointcloud-to-laserscan \
     ros-jazzy-slam-toolbox \
     && rm -rf /var/lib/apt/lists/*
 
