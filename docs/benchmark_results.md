@@ -8,15 +8,16 @@ probabilities and a 250x200 cost grid.
 
 | Stage | Mean | 95th percentile |
 |---|---:|---:|
-| File loading | 104.0 ms | 113.9 ms |
-| U-Net inference | 1155.5 ms | 1472.9 ms |
-| Calibration projection | 4.4 ms | 5.8 ms |
-| Semantic point painting | 3.3 ms | 4.3 ms |
-| Costmap generation | 2.6 ms | 3.4 ms |
-| End to end | 1269.7 ms | 1591.0 ms |
+| File loading | 98.4 ms | 125.5 ms |
+| U-Net inference | 1535.4 ms | 1841.1 ms |
+| Calibration projection | 7.0 ms | 9.9 ms |
+| Semantic point painting | 4.0 ms | 8.0 ms |
+| Dense costmap generation | 19.4 ms | 27.0 ms |
+| End to end | 1664.3 ms | 1977.6 ms |
 
-Mean throughput was **0.79 FPS**. The fusion and costmap stages together take
-less than 7 ms on this CPU; neural-network inference is the clear bottleneck.
-This is a reproducible CPU baseline, not a claim of deployment real-time speed.
-GPU inference, model export, or a smaller architecture are the natural next
-optimization targets if a higher frame rate is required.
+Mean throughput was **0.60 FPS**. Projection, painting, and dense costmap
+generation—including interpolation and free-space ray tracing—took 30.4 ms
+combined. Neural-network inference remains the clear bottleneck. CPU timing is
+sensitive to system load, so this is a reproducible baseline rather than a
+real-time claim. GPU inference, model export, or a smaller architecture are the
+natural next optimization targets if a higher frame rate is required.

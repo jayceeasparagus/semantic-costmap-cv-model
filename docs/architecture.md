@@ -77,18 +77,26 @@ cell_y = floor((point_y - origin_y) / resolution)
 ```
 
 Each cell averages its accumulated class probabilities and converts the result
-to a probability-weighted navigation cost. Raw LiDAR geometry is rasterized as
-a separate obstacle mask and max-merged with semantic evidence. This
-conservative rule prevents a wrong drivable prediction from clearing a physical
-obstacle. The default grid is 50 m forward by 40 m wide at 0.20 m per cell.
+to a probability-weighted navigation cost. Small unknown gaps are filled only
+when they have enough neighboring drivable cells. This is local interpolation,
+not an assumption that every unknown cell is road.
+
+Each LiDAR return also defines an observed free-space ray from the sensor to the
+return. A vectorized grid-ray sampler marks previously unknown cells along that
+ray as free but excludes the endpoint. Raw LiDAR endpoints in the configured
+obstacle height band are then max-merged as lethal. This ordering prevents
+interpolation or free-space clearing from lowering a physical obstacle. The
+default grid is 50 m forward by 40 m wide at 0.20 m per cell.
 
 ## 6. Multi-frame execution
 
 `SemanticCostmapPipeline` keeps the model and calibration loaded while frames
 are processed. `run_playback.py` pairs camera and LiDAR files by frame ID,
 generates debug panels and a GIF, and records load, inference, projection,
-fusion, costmap, and total latency. Offline file playback models the same
-per-frame flow that the ROS node executes on live messages.
+fusion, costmap, and total latency. When given timestamped map-to-base poses in
+a CSV, it also accumulates every local grid into one persistent global map.
+Offline file playback models the same per-frame flow that the ROS nodes execute
+on live messages and TF poses.
 
 ## 7. ROS 2 and Nav2
 
@@ -109,6 +117,11 @@ static map + obstacle/voxel layer + semantic layer + inflation layer
 
 Thus this project contributes context-aware costs while Nav2 continues to own
 map storage, inflation, and path-planner interfaces.
+
+The supplied Nav2 parameter template places the standard `InflationLayer`
+after the semantic layer. Inflation expands lethal costs around obstacles by a
+configurable robot-safety radius rather than duplicating that algorithm inside
+the custom plugin.
 
 ## 8. Pose and SLAM accumulation
 

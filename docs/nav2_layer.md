@@ -21,7 +21,18 @@ local_costmap:
         enabled: true
         topic: /semantic_costmap
         maximum_age: 1.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        inflation_radius: 0.60
+        cost_scaling_factor: 3.0
 ```
+
+The complete local/global layer template is installed from
+`ros2/semantic_costmap_ros/config/nav2_semantic_layers.yaml`. Merge those
+blocks into the robot's normal Nav2 parameter file so its frame, footprint,
+frequency, and sensor settings remain robot-specific. Inflation intentionally
+uses Nav2's maintained implementation and runs after semantic costs are merged.
 
 Build and test with:
 

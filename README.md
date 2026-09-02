@@ -31,9 +31,9 @@ classes. The selected epoch-29 checkpoint achieved:
 - **0.9439 / 0.8707 / 0.6452 / 0.7265** test IoU for drivable,
   non-drivable, static-obstacle, and dynamic-obstacle classes.
 
-An eight-frame CPU playback ran at **0.79 FPS**. U-Net inference averaged
-1155.5 ms, while projection, semantic fusion, and costmap generation together
-averaged 10.3 ms. See [benchmark results](docs/benchmark_results.md).
+An eight-frame dense-costmap CPU playback ran at **0.60 FPS**. U-Net inference
+averaged 1535.4 ms, while projection, semantic fusion, and costmap generation
+together averaged 30.4 ms. See [benchmark results](docs/benchmark_results.md).
 
 ## Navigation classes
 
@@ -46,7 +46,12 @@ averaged 10.3 ms. See [benchmark results](docs/benchmark_results.md).
 | 4 | `background` | skipped | sky and non-spatial context |
 
 Raw LiDAR obstacle evidence can raise a cell's cost but semantic predictions
-cannot lower it. Unknown cells remain unknown.
+cannot lower it. Cells outside observed rays remain unknown.
+
+LiDAR ray tracing marks observed space before each return as free, and a
+conservative neighbor rule fills small gaps surrounded by drivable evidence.
+On the included sample these steps increased single-frame known coverage from
+4.65% to 45.40% without lowering obstacle costs.
 
 ## Local setup
 
@@ -93,6 +98,11 @@ python tools/run_playback.py --device cpu --max-frames 8
 python tools/demo_pose_accumulation.py
 ```
 
+For pose-aligned sequence accumulation, provide a CSV containing
+`frame_id,timestamp,x,y,yaw` and add `--poses-csv path/to/poses.csv` to the
+playback command. These are map-to-base poses from odometry, localization, or
+SLAM.
+
 Each tool writes inspectable images and arrays under `outputs/`. Detailed data
 flow and equations are in [the architecture guide](docs/architecture.md).
 
@@ -118,6 +128,10 @@ inflation. Configuration examples are in the [ROS 2 node](docs/ros2_node.md),
 [Nav2 layer](docs/nav2_layer.md), and [SLAM accumulation](docs/slam_accumulation.md)
 guides.
 
+`ros2/semantic_costmap_ros/config/nav2_semantic_layers.yaml` configures Nav2's
+standard inflation layer after the semantic layer for both local and global
+costmaps.
+
 ## Tests
 
 ```bash
@@ -125,7 +139,7 @@ source .venv/bin/activate
 tools/run_checks.sh
 ```
 
-The complete local check runs 22 Python tests, builds both ROS packages, runs
+The complete local check runs 29 Python tests, builds both ROS packages, runs
 five ROS/C++ tests, verifies plugin registration, and performs node smoke
 tests. The A2D2 integration test skips when local data or the checkpoint is not
 available. Portable Python checks also run in GitHub Actions.

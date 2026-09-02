@@ -15,6 +15,13 @@ python tools/run_playback.py --device cpu --max-frames 8
 python tools/demo_pose_accumulation.py
 ```
 
+To use measured poses during playback, create a CSV with the columns
+`frame_id,timestamp,x,y,yaw` and run:
+
+```bash
+python tools/run_playback.py --device cpu --poses-csv poses.csv
+```
+
 Expected outputs:
 
 | Stage | Main artifact |
