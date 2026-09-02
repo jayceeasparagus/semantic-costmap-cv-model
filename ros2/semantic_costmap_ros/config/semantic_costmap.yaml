@@ -1,0 +1,10 @@
+semantic_costmap_node:
+  ros__parameters:
+    checkpoint_path: outputs/checkpoints/epoch29_restore/best_semantic_unet.pt
+    device: auto
+    base_frame: base_link
+    maximum_image_age: 0.15
+    resolution: 0.20
+    forward_range: 50.0
+    side_range: 20.0
+    minimum_confidence: 0.50

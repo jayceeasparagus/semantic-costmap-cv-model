@@ -62,3 +62,41 @@ def project_camera_points(
         depth=depth.copy(),
         valid=valid,
     )
+
+
+def project_optical_points(
+    points: np.ndarray,
+    camera_matrix: np.ndarray,
+    resolution: tuple[int, int],
+    minimum_depth: float = 0.1,
+) -> ProjectionResult:
+    """Project points in the standard ROS optical frame (+z forward)."""
+
+    points = np.asarray(points, dtype=np.float64)
+    camera_matrix = np.asarray(camera_matrix, dtype=np.float64)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("points must have shape (N, 3)")
+    if camera_matrix.shape != (3, 3):
+        raise ValueError("camera_matrix must have shape (3, 3)")
+
+    width, height = resolution
+    depth = points[:, 2]
+    columns = np.full(len(points), np.nan, dtype=np.float64)
+    rows = np.full(len(points), np.nan, dtype=np.float64)
+    in_front = np.isfinite(points).all(axis=1) & (depth > minimum_depth)
+    columns[in_front] = (
+        camera_matrix[0, 0] * points[in_front, 0] / depth[in_front]
+        + camera_matrix[0, 2]
+    )
+    rows[in_front] = (
+        camera_matrix[1, 1] * points[in_front, 1] / depth[in_front]
+        + camera_matrix[1, 2]
+    )
+    valid = (
+        in_front
+        & (columns >= 0.0)
+        & (columns < width)
+        & (rows >= 0.0)
+        & (rows < height)
+    )
+    return ProjectionResult(rows, columns, depth.copy(), valid)
