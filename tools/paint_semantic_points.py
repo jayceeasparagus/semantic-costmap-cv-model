@@ -82,7 +82,11 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     cloud_path = args.output_dir / "painted_points.npz"
     overlay_path = args.output_dir / "painted_points_overlay.png"
-    save_painted_cloud(cloud_path, painted)
+    save_painted_cloud(
+        cloud_path,
+        painted,
+        raytrace_origin_vehicle=calibration.origin_vehicle,
+    )
 
     palette = np.asarray(class_colors(), dtype=np.uint8)
     overlay = image.copy()

@@ -48,6 +48,11 @@ def load_painted_cloud(path: Path) -> PaintedPointCloud:
         columns=data["columns"],
         source_indices=data["source_indices"],
         lidar_ids=data["lidar_ids"] if "lidar_ids" in data else None,
+        raytrace_origin_vehicle=(
+            data["raytrace_origin_vehicle"]
+            if "raytrace_origin_vehicle" in data
+            else None
+        ),
     )
 
 
@@ -76,6 +81,7 @@ def main() -> None:
         painted,
         config,
         raw_points_vehicle=painted.points_vehicle,
+        raytrace_origin_vehicle=painted.raytrace_origin_vehicle,
     )
     paths = save_costmap(args.output_dir, costmap)
 

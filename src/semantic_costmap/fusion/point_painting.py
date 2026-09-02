@@ -24,6 +24,7 @@ class PaintedPointCloud:
     columns: np.ndarray
     source_indices: np.ndarray
     lidar_ids: np.ndarray | None = None
+    raytrace_origin_vehicle: np.ndarray | None = None
 
 
 def paint_points(
@@ -78,7 +79,11 @@ def paint_points(
         lidar_ids=None if lidar_ids is None else lidar_ids[valid],
     )
 
-def save_painted_cloud(path: str | Path, cloud: PaintedPointCloud) -> None:
+def save_painted_cloud(
+    path: str | Path,
+    cloud: PaintedPointCloud,
+    raytrace_origin_vehicle: np.ndarray | None = None,
+) -> None:
     """Save the reusable painted point representation as compressed NumPy data."""
 
     output_path = Path(path)
@@ -96,4 +101,9 @@ def save_painted_cloud(path: str | Path, cloud: PaintedPointCloud) -> None:
     )
     if cloud.lidar_ids is not None:
         arrays["lidar_ids"] = cloud.lidar_ids
+    if raytrace_origin_vehicle is not None:
+        origin = np.asarray(raytrace_origin_vehicle, dtype=np.float64)
+        if origin.shape != (3,):
+            raise ValueError("raytrace_origin_vehicle must have shape (3,)")
+        arrays["raytrace_origin_vehicle"] = origin
     np.savez_compressed(output_path, **arrays)
