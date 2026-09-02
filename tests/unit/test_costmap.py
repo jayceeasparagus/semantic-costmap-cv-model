@@ -33,6 +33,7 @@ def test_costmap_places_semantic_cost_in_metric_cell():
         y_max=2.0,
         obstacle_z_min=5.0,
         obstacle_z_max=6.0,
+        raytrace_free_space=False,
     )
     cloud = make_cloud(
         [[1.2, -0.2, -1.0], [1.3, -0.1, -1.0]],
@@ -77,6 +78,7 @@ def test_background_and_low_confidence_leave_unknown_cells():
         y_max=1.0,
         obstacle_z_min=5.0,
         obstacle_z_max=6.0,
+        raytrace_free_space=False,
     )
     cloud = make_cloud(
         [[0.2, 0.2, -1.0], [1.2, 0.2, -1.0]],
@@ -87,3 +89,74 @@ def test_background_and_low_confidence_leave_unknown_cells():
     result = build_semantic_costmap(cloud, config)
 
     assert np.all(result.costs == UNKNOWN_COST)
+
+
+def test_raytracing_marks_cells_before_return_without_clearing_endpoint():
+    config = CostmapConfig(
+        resolution=1.0,
+        x_min=0.0,
+        x_max=6.0,
+        y_min=-1.0,
+        y_max=1.0,
+        obstacle_z_min=0.0,
+        obstacle_z_max=1.0,
+        ground_interpolation_iterations=0,
+    )
+    cloud = make_cloud(
+        [[4.2, 0.2, 0.5]],
+        [[0.0, 0.0, 1.0, 0.0, 0.0]],
+    )
+
+    result = build_semantic_costmap(cloud, config)
+
+    assert np.all(result.costs[1, 0:4] == 0)
+    assert result.costs[1, 4] == LETHAL_COST
+
+
+def test_raytracing_does_not_lower_semantic_hazard():
+    config = CostmapConfig(
+        resolution=1.0,
+        x_min=0.0,
+        x_max=6.0,
+        y_min=-1.0,
+        y_max=1.0,
+        obstacle_z_min=5.0,
+        obstacle_z_max=6.0,
+        ground_interpolation_iterations=0,
+    )
+    cloud = make_cloud(
+        [[2.2, 0.2, -1.0], [4.2, 0.2, -1.0]],
+        [
+            [0.0, 1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0, 0.0],
+        ],
+    )
+
+    result = build_semantic_costmap(cloud, config)
+
+    assert result.costs[1, 2] == 220
+
+
+def test_ground_interpolation_fills_only_surrounded_unknown_cells():
+    config = CostmapConfig(
+        resolution=1.0,
+        x_min=0.0,
+        x_max=3.0,
+        y_min=0.0,
+        y_max=3.0,
+        obstacle_z_min=5.0,
+        obstacle_z_max=6.0,
+        raytrace_free_space=False,
+        ground_interpolation_iterations=1,
+        ground_interpolation_min_neighbors=3,
+    )
+    cloud = make_cloud(
+        [[0.2, 1.2, -1.0], [1.2, 0.2, -1.0], [2.2, 1.2, -1.0]],
+        [[1.0, 0.0, 0.0, 0.0, 0.0]] * 3,
+    )
+
+    result = build_semantic_costmap(cloud, config)
+
+    assert result.costs[1, 1] == 0
+    assert result.class_ids[1, 1] == 0
+    assert result.costs[2, 1] == UNKNOWN_COST

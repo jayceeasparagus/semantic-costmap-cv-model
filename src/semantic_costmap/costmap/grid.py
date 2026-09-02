@@ -28,6 +28,10 @@ class CostmapConfig:
     obstacle_z_max: float = 1.5
     minimum_confidence: float = 0.50
     minimum_points_per_cell: int = 1
+    raytrace_free_space: bool = True
+    raytrace_max_range: float = 50.0
+    ground_interpolation_iterations: int = 2
+    ground_interpolation_min_neighbors: int = 3
 
     @property
     def width(self) -> int:
@@ -44,6 +48,12 @@ class CostmapConfig:
             raise ValueError("grid maximums must exceed minimums")
         if self.minimum_points_per_cell < 1:
             raise ValueError("minimum_points_per_cell must be at least one")
+        if self.raytrace_max_range <= 0.0:
+            raise ValueError("raytrace_max_range must be positive")
+        if self.ground_interpolation_iterations < 0:
+            raise ValueError("ground_interpolation_iterations cannot be negative")
+        if not 1 <= self.ground_interpolation_min_neighbors <= 8:
+            raise ValueError("ground_interpolation_min_neighbors must be 1-8")
 
 
 @dataclass(frozen=True)
@@ -72,6 +82,141 @@ def _cell_indices(
         & (rows < config.height)
     )
     return rows, columns, valid
+
+
+def _neighbor_count(mask: np.ndarray) -> np.ndarray:
+    """Count occupied cells in each cell's eight-connected neighborhood."""
+
+    padded = np.pad(mask.astype(np.uint8), 1)
+    counts = np.zeros(mask.shape, dtype=np.uint8)
+    for row_offset in range(3):
+        for column_offset in range(3):
+            if row_offset == 1 and column_offset == 1:
+                continue
+            counts += padded[
+                row_offset : row_offset + mask.shape[0],
+                column_offset : column_offset + mask.shape[1],
+            ]
+    return counts
+
+
+def _interpolate_drivable_cells(
+    costs: np.ndarray,
+    class_ids: np.ndarray,
+    iterations: int,
+    minimum_neighbors: int,
+) -> None:
+    """Fill only small unknown gaps surrounded by observed drivable cells."""
+
+    drivable = (class_ids == 0) & (costs != UNKNOWN_COST)
+    for _ in range(iterations):
+        fill = (
+            (costs == UNKNOWN_COST)
+            & (_neighbor_count(drivable) >= minimum_neighbors)
+        )
+        if not fill.any():
+            break
+        costs[fill] = 0
+        class_ids[fill] = 0
+        drivable |= fill
+
+
+def _bresenham_cells(
+    start_row: int,
+    start_column: int,
+    end_row: int,
+    end_column: int,
+) -> list[tuple[int, int]]:
+    """Return grid cells crossed by a two-dimensional integer line."""
+
+    cells = []
+    column = start_column
+    row = start_row
+    delta_column = abs(end_column - start_column)
+    delta_row = abs(end_row - start_row)
+    column_step = 1 if start_column < end_column else -1
+    row_step = 1 if start_row < end_row else -1
+    error = delta_column - delta_row
+
+    while True:
+        cells.append((row, column))
+        if row == end_row and column == end_column:
+            break
+        doubled_error = 2 * error
+        if doubled_error > -delta_row:
+            error -= delta_row
+            column += column_step
+        if doubled_error < delta_column:
+            error += delta_column
+            row += row_step
+    return cells
+
+
+def _clip_ray_endpoint(
+    endpoint: np.ndarray,
+    config: CostmapConfig,
+) -> np.ndarray | None:
+    """Clip a ray from the vehicle origin to the map and range boundaries."""
+
+    delta = np.asarray(endpoint[:2], dtype=np.float64)
+    distance = np.linalg.norm(delta)
+    if not np.isfinite(distance) or distance <= 1e-9:
+        return None
+    delta *= min(1.0, config.raytrace_max_range / distance)
+
+    # The vehicle origin is (0, 0). Find the first map boundary hit by the ray.
+    scale = 1.0
+    epsilon = config.resolution * 1e-6
+    limits = (
+        (delta[0], config.x_min + epsilon, config.x_max - epsilon),
+        (delta[1], config.y_min + epsilon, config.y_max - epsilon),
+    )
+    for component, lower, upper in limits:
+        if component > 0.0:
+            scale = min(scale, upper / component)
+        elif component < 0.0:
+            scale = min(scale, lower / component)
+    if scale <= 0.0:
+        return None
+    return delta * scale
+
+
+def _raytraced_free_mask(
+    raw_points_vehicle: np.ndarray,
+    config: CostmapConfig,
+) -> np.ndarray:
+    """Mark cells traversed before each LiDAR return as observed free space."""
+
+    mask = np.zeros((config.height, config.width), dtype=bool)
+    origin = np.array([[0.0, 0.0, 0.0]])
+    start_rows, start_columns, origin_valid = _cell_indices(origin, config)
+    if not origin_valid[0]:
+        return mask
+
+    endpoints = set()
+    for point in raw_points_vehicle:
+        endpoint = _clip_ray_endpoint(point, config)
+        if endpoint is None:
+            continue
+        rows, columns, valid = _cell_indices(
+            np.array([[endpoint[0], endpoint[1], 0.0]]),
+            config,
+        )
+        if valid[0]:
+            endpoints.add((int(rows[0]), int(columns[0])))
+
+    start_row = int(start_rows[0])
+    start_column = int(start_columns[0])
+    for end_row, end_column in endpoints:
+        # The endpoint may be an obstacle, so only clear cells before it.
+        for row, column in _bresenham_cells(
+            start_row,
+            start_column,
+            end_row,
+            end_column,
+        )[:-1]:
+            mask[row, column] = True
+    return mask
 
 
 def build_semantic_costmap(
@@ -133,11 +278,26 @@ def build_semantic_costmap(
         ).sum(axis=0) / total_weight
         costs[populated] = np.rint(weighted_cost).astype(np.uint8)
 
+    if config.ground_interpolation_iterations > 0:
+        _interpolate_drivable_cells(
+            costs,
+            class_ids,
+            config.ground_interpolation_iterations,
+            config.ground_interpolation_min_neighbors,
+        )
+
     if raw_points_vehicle is None:
         raw_points_vehicle = points
     raw_points_vehicle = np.asarray(raw_points_vehicle, dtype=np.float64)
     if raw_points_vehicle.ndim != 2 or raw_points_vehicle.shape[1] != 3:
         raise ValueError("raw_points_vehicle must have shape (N, 3)")
+
+    if config.raytrace_free_space:
+        free_mask = _raytraced_free_mask(raw_points_vehicle, config)
+        newly_observed_free = free_mask & (costs == UNKNOWN_COST)
+        costs[newly_observed_free] = 0
+        class_ids[newly_observed_free] = 0
+
     obstacle_rows, obstacle_columns, obstacle_in_grid = _cell_indices(
         raw_points_vehicle,
         config,
