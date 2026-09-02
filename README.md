@@ -132,6 +132,16 @@ guides.
 standard inflation layer after the semantic layer for both local and global
 costmaps.
 
+The deterministic headless Nav2 planning proof can be run with:
+
+```bash
+export PYTHONPATH="$PWD/ros2/semantic_costmap_ros:$PYTHONPATH"
+ros2 launch semantic_costmap_ros nav2_demo.launch.py
+```
+
+It saves both returned paths and a route overlay under `outputs/nav2_demo/`.
+See the [end-to-end runbook](docs/end_to_end.md) for the complete workflow.
+
 ## Tests
 
 ```bash
@@ -139,7 +149,7 @@ source .venv/bin/activate
 tools/run_checks.sh
 ```
 
-The complete local check runs 29 Python tests, builds both ROS packages, runs
+The complete local check runs 36 Python tests, builds both ROS packages, runs
 five ROS/C++ tests, verifies plugin registration, and performs node smoke
 tests. The A2D2 integration test skips when local data or the checkpoint is not
 available. Portable Python checks also run in GitHub Actions.
