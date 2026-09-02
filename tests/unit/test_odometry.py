@@ -60,6 +60,35 @@ def test_metadata_timestamps_are_used(tmp_path: Path):
     assert records[1].x == pytest.approx(0.4903926402)
 
 
+def test_aggregate_bus_format_uses_camera_metadata(tmp_path: Path):
+    bus_path = tmp_path / "aggregate_bus.json"
+    bus_path.write_text(
+        json.dumps(
+            {
+                "vehicle_speed": {
+                    "unit": "Unit_KiloMeterPerHour",
+                    "values": [[1533906414000000, 3.6], [1533906415000000, 3.6]],
+                },
+                "angular_velocity_omega_z": {
+                    "unit": "Unit_DegreOfArcPerSecon",
+                    "values": [[1533906414000000, 0.0], [1533906415000000, 0.0]],
+                },
+            }
+        )
+    )
+    metadata = tmp_path / "metadata"
+    metadata.mkdir()
+    for frame_id, timestamp in (("000000001", 1.0), ("000000002", 2.0)):
+        (metadata / f"sequence_camera_frontcenter_{frame_id}.json").write_text(
+            json.dumps({"cam_tstamp": (1533906413 + timestamp) * 1_000_000})
+        )
+
+    records = build_odometry(load_bus_frames(bus_path), metadata)
+
+    assert len(records) == 2
+    assert records[1].x == pytest.approx(1.0)
+
+
 def test_pose_csv_round_trip(tmp_path: Path):
     bus_path = tmp_path / "bus.json"
     make_bus(bus_path)

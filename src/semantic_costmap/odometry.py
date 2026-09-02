@@ -78,11 +78,42 @@ def _frame_id_from_name(name: str) -> str:
 
 
 def load_bus_frames(path: str | Path) -> list[BusFrame]:
-    """Read the actual A2D2 list-of-frame-records bus format."""
+    """Read either extracted A2D2 bus representation."""
 
     payload = json.loads(Path(path).read_text())
+    if isinstance(payload, dict):
+        signals = {}
+        for signal_name, sample in payload.items():
+            if not isinstance(sample, dict):
+                continue
+            pairs = sample.get("values", [])
+            if not isinstance(pairs, list):
+                continue
+            timestamps = []
+            values = []
+            for pair in pairs:
+                if isinstance(pair, (list, tuple)) and len(pair) >= 2:
+                    timestamps.append(pair[0])
+                    values.append(pair[1])
+            if timestamps:
+                signals[signal_name] = {
+                    "timestamps": timestamps,
+                    "values": values,
+                    "unit": sample.get("unit"),
+                }
+        if not signals:
+            raise ValueError("A2D2 bus JSON contains no usable signal arrays")
+        first_signal = next(iter(signals.values()))
+        return [
+            BusFrame(
+                frame_id="__aggregate__",
+                frame_name="aggregate bus signals",
+                timestamp_s=_seconds(first_signal["timestamps"][0]),
+                signals=signals,
+            )
+        ]
     if not isinstance(payload, list):
-        raise ValueError("A2D2 bus JSON must contain a list of frame records")
+        raise ValueError("A2D2 bus JSON must contain frame records or signal arrays")
 
     frames: list[BusFrame] = []
     for record in payload:
@@ -161,7 +192,7 @@ def _camera_timestamps(
         if not isinstance(payload, dict) or "cam_tstamp" not in payload:
             continue
         frame_id = _frame_id_from_name(path.name)
-        if frame_id in bus_ids:
+        if "__aggregate__" in bus_ids or frame_id in bus_ids:
             records.append((frame_id, _seconds(payload["cam_tstamp"])))
     if not records:
         raise ValueError("camera metadata contains no frames matching the bus JSON")
@@ -233,4 +264,3 @@ def write_pose_csv(records: Iterable[OdometryRecord], path: str | Path) -> None:
             (row.frame_id, f"{row.timestamp:.9f}", f"{row.x:.9f}", f"{row.y:.9f}", f"{row.yaw:.9f}")
             for row in rows
         )
-
