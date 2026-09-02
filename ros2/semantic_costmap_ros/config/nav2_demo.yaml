@@ -1,0 +1,52 @@
+map_server:
+  ros__parameters:
+    yaml_filename: nav2_demo_map.yaml
+    frame_id: map
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 5.0
+    planner_plugins: ["GridBased"]
+    GridBased:
+      plugin: "nav2_navfn_planner::NavfnPlanner"
+      tolerance: 0.5
+      use_astar: false
+      allow_unknown: false
+
+semantic_hazard_publisher:
+  ros__parameters:
+    width: 20
+    height: 12
+    resolution: 1.0
+    origin_x: -10.0
+    origin_y: -6.0
+    publish_rate: 5.0
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      global_frame: map
+      robot_base_frame: base_link
+      update_frequency: 5.0
+      publish_frequency: 5.0
+      resolution: 1.0
+      width: 20
+      height: 12
+      origin_x: -10.0
+      origin_y: -6.0
+      track_unknown_space: false
+      rolling_window: false
+      plugins: ["static_layer", "semantic_layer", "inflation_layer"]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: true
+      semantic_layer:
+        plugin: "semantic_costmap_layer/SemanticCostmapLayer"
+        enabled: true
+        topic: /semantic_costmap
+        maximum_age: 2.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        enabled: true
+        inflation_radius: 0.6
+        cost_scaling_factor: 3.0
