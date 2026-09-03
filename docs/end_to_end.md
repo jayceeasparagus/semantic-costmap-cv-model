@@ -59,6 +59,20 @@ local and persistent semantic grids.
 This replay is deterministic and finite by default. It requires local A2D2
 camera, LiDAR, calibration, and bus files; those files are never committed.
 
+To attach the Nav2 planner and custom global semantic layer to the same graph,
+use:
+
+```bash
+ros2 launch semantic_costmap_ros a2d2_slam_nav2.launch.py
+```
+
+The replay uses current ROS timestamps even though its pose increments come
+from recorded bus signals, because Nav2 rejects stale sensor layers. The
+integrated verifier writes `outputs/slam_nav2/integration_result.json` only
+after observing the SLAM map, `map -> odom`, the composed
+`map -> base_link` pose, non-empty persistent semantic evidence, and Nav2's
+global costmap.
+
 ## Headless Nav2 planning proof
 
 The Nav2 demo is independent of the large A2D2 download. It uses a small
@@ -96,8 +110,9 @@ costmap node and use Nav2's normal controller and behavior-tree stack.
 - Ray tracing marks observed free space, obstacle footprints improve sparse
   returns, and the Nav2 inflation layer expands collision cost around lethal
   cells.
-- The sample demonstrates bus-derived odometry and a reproducible SLAM
-  Toolbox launch, but it is not a claim of localization accuracy.
+- The integrated launch demonstrates bus-derived odometry corrected through
+  SLAM Toolbox and consumed by semantic accumulation and Nav2, but it is not a
+  claim of localization accuracy.
 - The measured local CPU playback rate and model metrics in
   `docs/benchmark_results.md` are the project’s reported performance numbers;
   no real-time claim is made for an arbitrary robot computer.

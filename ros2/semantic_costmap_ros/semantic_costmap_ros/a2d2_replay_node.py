@@ -112,10 +112,12 @@ class A2D2ReplayNode(Node):
         stamp = self._stamp(pose.timestamp)
         image = np.asarray(PILImage.open(pair.image_path).convert("RGB"))
         lidar = np.load(pair.lidar_path)
+        # Publish the pose first so TF-aware sensor consumers can transform
+        # this frame as soon as its image and point cloud arrive.
+        self._publish_odometry(pose, stamp)
         self._publish_image(image, stamp)
         self._publish_camera_info(stamp)
         self._publish_points(lidar, stamp)
-        self._publish_odometry(pose, stamp)
         self.index += 1
 
     def _publish_image(self, image: np.ndarray, stamp: RosTime) -> None:

@@ -17,13 +17,23 @@ The accumulator subscribes to `painted_points` and publishes
 the local `semantic_costmap` or persistent `semantic_global_costmap`, depending
 on whether the robot has a valid map-frame pose.
 
-An offline headless check uses explicit synthetic poses because the small A2D2
-sample does not provide the ROS TF stream:
+An offline headless check can use explicit poses without ROS:
 
 ```bash
 python tools/demo_pose_accumulation.py
 ```
 
-This demo validates coordinate placement only. A live run should source SLAM
-Toolbox or localization transforms and can be inspected in RViz2 by displaying
-the published occupancy grid and painted point cloud.
+This demo validates coordinate placement only. The integrated ROS launch uses
+A2D2 bus odometry for `odom -> base_link`, converts LiDAR into laser scans, and
+runs SLAM Toolbox as the owner of `map -> odom`:
+
+```bash
+ros2 launch semantic_costmap_ros a2d2_slam_nav2.launch.py
+```
+
+The transform lookup performed for every painted cloud therefore includes the
+SLAM correction instead of treating odometry as a global pose. The resulting
+`semantic_global_costmap` is persistent in `map` and is consumed by the Nav2
+global semantic layer. The launch writes a verification record to
+`outputs/slam_nav2/integration_result.json` after observing the SLAM map, both
+required TF transforms, the semantic map, and Nav2's global costmap.

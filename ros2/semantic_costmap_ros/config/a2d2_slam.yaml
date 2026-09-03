@@ -4,9 +4,14 @@ a2d2_replay:
     lidar_dir: data/raw/a2d2_playback/lidar
     bus_json: data/raw/a2d2_playback/bus/20180807145028_bus_signals.json
     calibration: configs/a2d2_cams_lidars.json
-    publish_rate: 5.0
+    # CPU U-Net inference takes roughly 1.5 s on the reference laptop. Slow
+    # replay prevents the finite sample from outrunning perception and SLAM.
+    publish_rate: 0.5
     loop: false
-    timestamp_mode: bus
+    # Use current ROS time during live replay. Nav2 intentionally rejects stale
+    # costmaps, so publishing the original 2018 timestamps would make the
+    # semantic layer ignore every replayed observation.
+    timestamp_mode: now
     camera_frame: front_center_camera
     base_frame: base_link
     odom_frame: odom
@@ -37,6 +42,9 @@ slam_toolbox:
     resolution: 0.2
     map_update_interval: 1.0
     transform_publish_period: 0.05
+    # Recorded odometry is published only once per frame. Do not future-date
+    # map->odom beyond the newest odom->base_link sample during replay.
+    transform_timeout: 0.0
     minimum_time_interval: 0.1
     max_laser_range: 50.0
     minimum_travel_distance: 0.1

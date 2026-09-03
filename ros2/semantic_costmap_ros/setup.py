@@ -15,6 +15,7 @@ setup(
             [
                 "launch/semantic_costmap.launch.py",
                 "launch/a2d2_slam.launch.py",
+                "launch/a2d2_slam_nav2.launch.py",
                 "launch/nav2_demo.launch.py",
             ],
         ),
@@ -24,6 +25,7 @@ setup(
                 "config/semantic_costmap.yaml",
                 "config/nav2_semantic_layers.yaml",
                 "config/a2d2_slam.yaml",
+                "config/a2d2_slam_nav2.yaml",
                 "config/nav2_demo.yaml",
                 "config/nav2_demo_map.yaml",
                 "config/nav2_demo_map.pgm",
@@ -44,6 +46,8 @@ setup(
             "a2d2_replay = semantic_costmap_ros.a2d2_replay_node:main",
             "semantic_hazard_publisher = semantic_costmap_ros.semantic_hazard_publisher:main",
             "nav2_path_demo = semantic_costmap_ros.nav2_path_demo:main",
+            "slam_nav2_verifier = semantic_costmap_ros.slam_nav2_verifier:main",
+            "pointcloud_to_laserscan = semantic_costmap_ros.pointcloud_to_laserscan_node:main",
         ],
     },
 )

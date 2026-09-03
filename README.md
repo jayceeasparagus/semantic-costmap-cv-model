@@ -142,6 +142,19 @@ ros2 launch semantic_costmap_ros nav2_demo.launch.py
 It saves both returned paths and a route overlay under `outputs/nav2_demo/`.
 See the [end-to-end runbook](docs/end_to_end.md) for the complete workflow.
 
+With local A2D2 replay data available, one integrated launch runs replay,
+SLAM Toolbox, persistent semantic accumulation, and the Nav2 planner:
+
+```bash
+ros2 launch semantic_costmap_ros a2d2_slam_nav2.launch.py
+```
+
+SLAM Toolbox publishes `map -> odom`; replay publishes `odom -> base_link`;
+and the accumulator transforms each painted cloud through that composed pose.
+Nav2's global costmap max-merges `/semantic_global_costmap` through the custom
+C++ layer before inflation. A successful live wiring check is written to
+`outputs/slam_nav2/integration_result.json`.
+
 ## Tests
 
 ```bash
@@ -183,8 +196,8 @@ outputs/                 Generated artifacts and checkpoints (ignored)
 
 This is a tested offline and headless ROS integration, not a vehicle-certified
 system. The included A2D2 sample provides camera-frame LiDAR points; the code
-still computes image projection independently from calibration. The persistent
-map demo uses synthetic poses because the small sample has no ROS TF stream.
-A live robot or rosbag must provide synchronized sensors and valid TF from a
-real SLAM/localization system. GPU inference or model optimization is needed
-for practical real-time frame rates.
+still computes image projection independently from calibration. The ROS
+integration uses bus odometry as SLAM Toolbox's initial motion estimate and
+laser scan matching to provide the map-frame correction. This demonstrates the
+software integration, not localization accuracy. GPU inference or model
+optimization is needed for practical real-time frame rates.

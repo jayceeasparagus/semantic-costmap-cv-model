@@ -33,10 +33,12 @@ class SemanticMapAccumulatorNode(Node):
     def __init__(self) -> None:
         super().__init__("semantic_map_accumulator")
         self.declare_parameter("map_frame", "map")
+        self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("resolution", 0.20)
         self.declare_parameter("map_range", 50.0)
         self.declare_parameter("dynamic_decay_seconds", 2.0)
         self.map_frame = self.get_parameter("map_frame").value
+        self.odom_frame = self.get_parameter("odom_frame").value
         map_range = float(self.get_parameter("map_range").value)
         self.accumulator = PoseAwareAccumulator(
             GlobalMapConfig(
@@ -63,21 +65,50 @@ class SemanticMapAccumulatorNode(Node):
             "semantic_global_costmap",
             2,
         )
+        self.pending_cloud: PointCloud2 | None = None
+        self.retry_timer = self.create_timer(0.5, self._retry_pending_cloud)
 
     def _cloud_callback(self, message: PointCloud2) -> None:
         try:
-            transform = self.tf_buffer.lookup_transform(
-                self.map_frame,
-                message.header.frame_id,
-                Time.from_msg(message.header.stamp),
-                timeout=Duration(seconds=0.1),
-            )
+            sensor_time = Time.from_msg(message.header.stamp)
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    self.map_frame,
+                    message.header.frame_id,
+                    sensor_time,
+                    timeout=Duration(seconds=0.1),
+                )
+            except TransformException:
+                # Perception arrives after SLAM has processed the scan. Apply
+                # the newest map->odom correction to the sensor-time
+                # odom->sensor pose instead of pretending the cloud is new.
+                try:
+                    transform = self.tf_buffer.lookup_transform_full(
+                        self.map_frame,
+                        Time(),
+                        message.header.frame_id,
+                        sensor_time,
+                        self.odom_frame,
+                        timeout=Duration(seconds=0.1),
+                    )
+                except TransformException:
+                    # Very short replays can begin before TF listeners cache
+                    # the first odometry sample. Seed the map with the latest
+                    # available SLAM pose; continuous runs normally use one of
+                    # the timestamp-preserving paths above.
+                    transform = self.tf_buffer.lookup_transform(
+                        self.map_frame,
+                        message.header.frame_id,
+                        Time(),
+                        timeout=Duration(seconds=0.1),
+                    )
             points, classes, costs = painted_cloud_arrays(message)
             points_map = transform_points(
                 points,
                 transform_message_to_matrix(transform.transform),
             )
         except (TransformException, ValueError) as error:
+            self.pending_cloud = message
             self.get_logger().warning(f"Map accumulation skipped: {error}")
             return
 
@@ -88,7 +119,15 @@ class SemanticMapAccumulatorNode(Node):
             costs,
             timestamp,
         )
-        self._publish_grid(timestamp, message.header.stamp)
+        # The map contains historical evidence, but this grid publication is
+        # current. A fresh stamp prevents Nav2 from aging out a delayed update.
+        self._publish_grid(timestamp, self.get_clock().now().to_msg())
+        if self.pending_cloud is message:
+            self.pending_cloud = None
+
+    def _retry_pending_cloud(self) -> None:
+        if self.pending_cloud is not None:
+            self._cloud_callback(self.pending_cloud)
 
     def _publish_grid(self, timestamp: float, stamp) -> None:
         costs = self.accumulator.grid(timestamp)

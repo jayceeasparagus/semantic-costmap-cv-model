@@ -5,8 +5,9 @@ import time
 
 import numpy as np
 import rclpy
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.duration import Duration
-from rclpy.executors import ExternalShutdownException
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.time import Time
 from nav_msgs.msg import OccupancyGrid
@@ -19,7 +20,7 @@ from semantic_costmap.config import DEFAULT_CHECKPOINT_PATH
 from semantic_costmap.costmap import CostmapConfig, build_semantic_costmap
 from semantic_costmap.fusion import paint_points
 from semantic_costmap.geometry import (
-    project_optical_points,
+    project_camera_points,
     transform_points,
 )
 from semantic_costmap.inference import SegmentationResult, SemanticSegmenter
@@ -79,13 +80,37 @@ class SemanticCostmapNode(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.camera_info: CameraInfo | None = None
-        self.latest_segmentation: SegmentationResult | None = None
-        self.latest_image_header: Header | None = None
+        # Inference is slower than replay on a CPU. Keep several completed
+        # frames so a queued cloud is matched by timestamp instead of being
+        # fused with whichever image callback happened to run most recently.
+        self.segmentations: dict[int, tuple[SegmentationResult, Header]] = {}
+        self.pending_clouds: dict[int, PointCloud2] = {}
         self.processed_clouds = 0
 
-        self.create_subscription(CameraInfo, "camera_info", self._camera_info_callback, 10)
-        self.create_subscription(Image, "image", self._image_callback, 2)
-        self.create_subscription(PointCloud2, "points", self._pointcloud_callback, 2)
+        self.image_group = MutuallyExclusiveCallbackGroup()
+        self.cloud_group = MutuallyExclusiveCallbackGroup()
+        self.info_group = MutuallyExclusiveCallbackGroup()
+        self.create_subscription(
+            CameraInfo,
+            "camera_info",
+            self._camera_info_callback,
+            10,
+            callback_group=self.info_group,
+        )
+        self.create_subscription(
+            Image,
+            "image",
+            self._image_callback,
+            2,
+            callback_group=self.image_group,
+        )
+        self.create_subscription(
+            PointCloud2,
+            "points",
+            self._pointcloud_callback,
+            2,
+            callback_group=self.cloud_group,
+        )
         self.mask_publisher = self.create_publisher(Image, "semantic_mask", 2)
         self.painted_publisher = self.create_publisher(
             PointCloud2, "painted_points", 2
@@ -103,9 +128,15 @@ class SemanticCostmapNode(Node):
     def _image_callback(self, message: Image) -> None:
         try:
             image = image_message_to_pil(message)
-            self.latest_segmentation = self.segmenter.predict(image)
-            self.latest_image_header = message.header
-            self._publish_mask(self.latest_segmentation, message.header)
+            segmentation = self.segmenter.predict(image)
+            stamp_ns = Time.from_msg(message.header.stamp).nanoseconds
+            self.segmentations[stamp_ns] = (segmentation, message.header)
+            while len(self.segmentations) > 8:
+                del self.segmentations[next(iter(self.segmentations))]
+            self._publish_mask(segmentation, message.header)
+            cloud = self.pending_clouds.pop(stamp_ns, None)
+            if cloud is not None:
+                self._process_cloud(cloud, segmentation)
         except (ValueError, RuntimeError) as error:
             self.get_logger().error(f"Image processing failed: {error}")
 
@@ -119,22 +150,22 @@ class SemanticCostmapNode(Node):
         return transform_message_to_matrix(transform.transform)
 
     def _pointcloud_callback(self, message: PointCloud2) -> None:
-        if (
-            self.latest_segmentation is None
-            or self.latest_image_header is None
-            or self.camera_info is None
-        ):
-            self.get_logger().warning("Waiting for image and CameraInfo", throttle_duration_sec=5.0)
+        if self.camera_info is None:
+            self.get_logger().warning("Waiting for CameraInfo", throttle_duration_sec=5.0)
             return
-        cloud_time = Time.from_msg(message.header.stamp)
-        image_time = Time.from_msg(self.latest_image_header.stamp)
-        age = abs((cloud_time - image_time).nanoseconds) / 1e9
-        if age > self.maximum_image_age:
-            self.get_logger().warning(
-                f"Rejected unsynchronized sensors ({age:.3f} s apart)",
-                throttle_duration_sec=2.0,
-            )
+        cloud_stamp_ns = Time.from_msg(message.header.stamp).nanoseconds
+        matched = self.segmentations.get(cloud_stamp_ns)
+        if matched is None:
+            self.pending_clouds[cloud_stamp_ns] = message
+            while len(self.pending_clouds) > 8:
+                del self.pending_clouds[next(iter(self.pending_clouds))]
             return
+        self._process_cloud(message, matched[0])
+
+    def _process_cloud(
+        self, message: PointCloud2, segmentation: SegmentationResult
+    ) -> None:
+        """Fuse an already timestamp-matched image prediction and cloud."""
 
         start = time.perf_counter()
         try:
@@ -153,7 +184,9 @@ class SemanticCostmapNode(Node):
             points_camera = transform_points(points_source, source_to_camera)
             points_base = transform_points(points_source, source_to_base)
             matrix = np.asarray(self.camera_info.k, dtype=np.float64).reshape(3, 3)
-            projection = project_optical_points(
+            # The extracted A2D2 points and calibration use +x forward,
+            # +y left, and +z up rather than the ROS optical convention.
+            projection = project_camera_points(
                 points_camera,
                 matrix,
                 (self.camera_info.width, self.camera_info.height),
@@ -162,7 +195,7 @@ class SemanticCostmapNode(Node):
                 points_camera,
                 points_base,
                 projection,
-                self.latest_segmentation,
+                segmentation,
             )
             costmap = build_semantic_costmap(
                 painted,
@@ -234,11 +267,14 @@ class SemanticCostmapNode(Node):
 def main(args=None) -> None:
     rclpy.init(args=args)
     node = SemanticCostmapNode()
+    executor = MultiThreadedExecutor(num_threads=2)
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        executor.shutdown()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
