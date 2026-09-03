@@ -7,7 +7,12 @@ import numpy as np
 from PIL import Image
 import yaml
 
-from semantic_costmap.config import BACKGROUND_CLASS_ID, class_costs
+from semantic_costmap.config import (
+    BACKGROUND_CLASS_ID,
+    NUM_CLASSES,
+    class_colors,
+    class_costs,
+)
 from semantic_costmap.fusion import PaintedPointCloud
 
 
@@ -388,6 +393,28 @@ def costmap_to_rgb(
         if observed_free_mask.shape != costs.shape:
             raise ValueError("observed_free_mask must match costs shape")
         image[observed_free_mask & (costs == 0)] = (0, 150, 220)
+    return np.flipud(image)
+
+
+def semantic_map_to_rgb(
+    class_ids: np.ndarray,
+    known_mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """Render semantic class IDs with the project class palette."""
+
+    class_ids = np.asarray(class_ids)
+    if class_ids.ndim != 2:
+        raise ValueError("class_ids must be a two-dimensional array")
+    if class_ids.size and (
+        class_ids.min() < 0 or class_ids.max() >= NUM_CLASSES
+    ):
+        raise ValueError("class_ids contains an unsupported class")
+    image = np.asarray(class_colors(), dtype=np.uint8)[class_ids]
+    if known_mask is not None:
+        known_mask = np.asarray(known_mask, dtype=bool)
+        if known_mask.shape != class_ids.shape:
+            raise ValueError("known_mask must match class_ids")
+        image[~known_mask] = (70, 70, 70)
     return np.flipud(image)
 
 

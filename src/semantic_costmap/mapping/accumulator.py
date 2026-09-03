@@ -52,6 +52,16 @@ class PoseAwareAccumulator:
         shape = (self.config.height, self.config.width)
         self.static_costs = np.full(shape, -1, dtype=np.int16)
         self.dynamic_costs = np.full(shape, -1, dtype=np.int16)
+        self.static_class_ids = np.full(
+            shape,
+            BACKGROUND_CLASS_ID,
+            dtype=np.uint8,
+        )
+        self.dynamic_class_ids = np.full(
+            shape,
+            BACKGROUND_CLASS_ID,
+            dtype=np.uint8,
+        )
         self.dynamic_last_seen = np.full(shape, -np.inf, dtype=np.float64)
 
     def _indices(
@@ -93,19 +103,41 @@ class PoseAwareAccumulator:
         usable = in_map & (costs >= 0) & (class_ids != BACKGROUND_CLASS_ID)
         static = usable & (class_ids != DYNAMIC_CLASS_ID)
         dynamic = usable & (class_ids == DYNAMIC_CLASS_ID)
+        static_rows = rows[static]
+        static_columns = columns[static]
+        static_costs = costs[static].astype(np.int16)
         np.maximum.at(
             self.static_costs,
-            (rows[static], columns[static]),
-            costs[static].astype(np.int16),
+            (static_rows, static_columns),
+            static_costs,
         )
+        static_winners = static_costs >= self.static_costs[
+            static_rows,
+            static_columns,
+        ]
+        self.static_class_ids[
+            static_rows[static_winners],
+            static_columns[static_winners],
+        ] = class_ids[static][static_winners].astype(np.uint8)
+        dynamic_rows = rows[dynamic]
+        dynamic_columns = columns[dynamic]
+        dynamic_costs = costs[dynamic].astype(np.int16)
         np.maximum.at(
             self.dynamic_costs,
-            (rows[dynamic], columns[dynamic]),
-            costs[dynamic].astype(np.int16),
+            (dynamic_rows, dynamic_columns),
+            dynamic_costs,
         )
+        dynamic_winners = dynamic_costs >= self.dynamic_costs[
+            dynamic_rows,
+            dynamic_columns,
+        ]
+        self.dynamic_class_ids[
+            dynamic_rows[dynamic_winners],
+            dynamic_columns[dynamic_winners],
+        ] = class_ids[dynamic][dynamic_winners].astype(np.uint8)
         np.maximum.at(
             self.dynamic_last_seen,
-            (rows[dynamic], columns[dynamic]),
+            (dynamic_rows, dynamic_columns),
             float(timestamp),
         )
 
@@ -160,3 +192,28 @@ class PoseAwareAccumulator:
         known = result >= 0
         output[known] = result[known].astype(np.uint8)
         return output
+
+    def semantic_grid(self, timestamp: float) -> np.ndarray:
+        """Return the accumulated semantic class ID at each global cell."""
+
+        result = self.static_class_ids.copy()
+        static_known = self.static_costs >= 0
+        dynamic_active = (
+            (float(timestamp) - self.dynamic_last_seen)
+            <= self.config.dynamic_decay_seconds
+        ) & (self.dynamic_costs >= 0)
+        dynamic_wins = dynamic_active & (
+            self.dynamic_costs >= self.static_costs
+        )
+        result[dynamic_wins] = self.dynamic_class_ids[dynamic_wins]
+        result[~(static_known | dynamic_active)] = BACKGROUND_CLASS_ID
+        return result
+
+    def semantic_known_mask(self, timestamp: float) -> np.ndarray:
+        """Return which global cells contain a non-background observation."""
+
+        dynamic_active = (
+            (float(timestamp) - self.dynamic_last_seen)
+            <= self.config.dynamic_decay_seconds
+        ) & (self.dynamic_costs >= 0)
+        return (self.static_costs >= 0) | dynamic_active

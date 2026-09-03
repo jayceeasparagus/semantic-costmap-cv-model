@@ -6,6 +6,7 @@ from semantic_costmap.costmap.grid import (
     build_semantic_costmap,
     costmap_to_rgb,
     save_costmap,
+    semantic_map_to_rgb,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "build_semantic_costmap",
     "costmap_to_rgb",
     "save_costmap",
+    "semantic_map_to_rgb",
 ]

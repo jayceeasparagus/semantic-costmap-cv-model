@@ -9,7 +9,7 @@ import numpy as np
 from PIL import Image
 
 from semantic_costmap.config import DEFAULT_CHECKPOINT_PATH
-from semantic_costmap.costmap import costmap_to_rgb
+from semantic_costmap.costmap import costmap_to_rgb, semantic_map_to_rgb
 from semantic_costmap.mapping import GlobalMapConfig, PoseAwareAccumulator
 from semantic_costmap.pipeline import SemanticCostmapPipeline
 from semantic_costmap.playback import (
@@ -131,11 +131,16 @@ def main() -> None:
     }
     if accumulator is not None:
         accumulated = accumulator.grid(last_pose_timestamp)
+        semantic_classes = accumulator.semantic_grid(last_pose_timestamp)
+        semantic_known = accumulator.semantic_known_mask(last_pose_timestamp)
         accumulated_arrays = args.output_dir / "accumulated_costmap.npz"
         accumulated_preview = args.output_dir / "accumulated_costmap_preview.png"
+        semantic_preview = args.output_dir / "accumulated_semantic_map.png"
         np.savez_compressed(
             accumulated_arrays,
             costs=accumulated,
+            semantic_class_ids=semantic_classes,
+            semantic_known_mask=semantic_known,
             resolution=accumulator.config.resolution,
             x_min=accumulator.config.x_min,
             y_min=accumulator.config.y_min,
@@ -143,6 +148,10 @@ def main() -> None:
         Image.fromarray(costmap_to_rgb(accumulated), mode="RGB").save(
             accumulated_preview
         )
+        Image.fromarray(
+            semantic_map_to_rgb(semantic_classes, semantic_known),
+            mode="RGB",
+        ).save(semantic_preview)
         trajectory_preview = args.output_dir / "odometry_trajectory.png"
         trajectory_image = render_trajectory(list(pose_records.values()))
         trajectory_image.save(trajectory_preview)
@@ -150,6 +159,7 @@ def main() -> None:
             "pose_source": str(args.poses_csv),
             "known_cells": int((accumulated != 255).sum()),
             "preview": str(accumulated_preview),
+            "semantic_preview": str(semantic_preview),
             "trajectory_preview": str(trajectory_preview),
         }
     benchmark_path = args.output_dir / "benchmark.json"
@@ -166,6 +176,7 @@ def main() -> None:
     if accumulator is not None:
         print(f"Saved accumulated map: {accumulated_arrays}")
         print(f"Saved accumulated preview: {accumulated_preview}")
+        print(f"Saved semantic map: {semantic_preview}")
         print(f"Saved trajectory preview: {trajectory_preview}")
 
 

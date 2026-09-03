@@ -7,7 +7,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from semantic_costmap.costmap import CostmapConfig, SemanticCostmap, costmap_to_rgb
+from semantic_costmap.costmap import (
+    CostmapConfig,
+    SemanticCostmap,
+    costmap_to_rgb,
+    semantic_map_to_rgb,
+)
 from semantic_costmap.mapping import GlobalMapConfig, Pose2D, PoseAwareAccumulator
 
 
@@ -72,22 +77,32 @@ def main() -> None:
         accumulator.update_local_costmap(local, pose, float(timestamp))
 
     grid = accumulator.grid(timestamp=float(len(poses) + 3))
+    semantic_classes = accumulator.semantic_grid(timestamp=float(len(poses) + 3))
+    semantic_known = accumulator.semantic_known_mask(timestamp=float(len(poses) + 3))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     arrays_path = args.output_dir / "accumulated_costmap.npz"
     preview_path = args.output_dir / "accumulated_costmap_preview.png"
+    semantic_preview_path = args.output_dir / "accumulated_semantic_map.png"
     np.savez_compressed(
         arrays_path,
         costs=grid,
+        semantic_class_ids=semantic_classes,
+        semantic_known_mask=semantic_known,
         resolution=accumulator.config.resolution,
         x_min=accumulator.config.x_min,
         y_min=accumulator.config.y_min,
     )
     Image.fromarray(costmap_to_rgb(grid), mode="RGB").save(preview_path)
+    Image.fromarray(
+        semantic_map_to_rgb(semantic_classes, semantic_known),
+        mode="RGB",
+    ).save(semantic_preview_path)
     print("Pose source: explicit synthetic demonstration poses")
     print(f"Accumulated observations: {len(poses)}")
     print(f"Known global cells: {(grid != 255).sum()}")
     print(f"Saved: {arrays_path}")
     print(f"Saved: {preview_path}")
+    print(f"Saved: {semantic_preview_path}")
 
 
 if __name__ == "__main__":

@@ -45,3 +45,37 @@ def test_background_points_are_not_inserted():
         timestamp=0.0,
     )
     assert accumulator.grid(timestamp=0.0)[5, 5] == 255
+
+
+def test_semantic_grid_preserves_class_ids_and_unknown_cells():
+    accumulator = make_accumulator()
+    accumulator.update_map_points(
+        np.array([[0.2, 0.2], [1.2, 0.2]]),
+        [0, 2],
+        [0, 254],
+        timestamp=0.0,
+    )
+
+    semantic = accumulator.semantic_grid(timestamp=0.0)
+    known = accumulator.semantic_known_mask(timestamp=0.0)
+
+    assert semantic[5, 5] == 0
+    assert semantic[5, 6] == 2
+    assert semantic[0, 0] == 4
+    assert known[5, 5]
+    assert not known[0, 0]
+
+
+def test_out_of_bounds_points_are_ignored():
+    accumulator = make_accumulator()
+    accumulator.update_map_points(
+        np.array([[-100.0, 0.0], [0.2, 0.2], [100.0, 0.0]]),
+        [2, 0, 3],
+        [254, 0, 254],
+        timestamp=0.0,
+    )
+
+    semantic = accumulator.semantic_grid(timestamp=0.0)
+
+    assert semantic[5, 5] == 0
+    assert np.count_nonzero(accumulator.semantic_known_mask(0.0)) == 1
