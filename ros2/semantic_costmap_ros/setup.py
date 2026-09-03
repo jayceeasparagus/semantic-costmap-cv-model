@@ -48,6 +48,7 @@ setup(
             "nav2_path_demo = semantic_costmap_ros.nav2_path_demo:main",
             "slam_nav2_verifier = semantic_costmap_ros.slam_nav2_verifier:main",
             "pointcloud_to_laserscan = semantic_costmap_ros.pointcloud_to_laserscan_node:main",
+            "nav2_goal_demo = semantic_costmap_ros.nav2_goal_demo:main",
         ],
     },
 )

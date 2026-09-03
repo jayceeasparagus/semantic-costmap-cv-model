@@ -153,7 +153,10 @@ SLAM Toolbox publishes `map -> odom`; replay publishes `odom -> base_link`;
 and the accumulator transforms each painted cloud through that composed pose.
 Nav2's global costmap max-merges `/semantic_global_costmap` through the custom
 C++ layer before inflation. A successful live wiring check is written to
-`outputs/slam_nav2/integration_result.json`.
+`outputs/slam_nav2/integration_result.json`. The launch also selects a distant
+low-cost goal cell, requests a Nav2 path, and saves
+`outputs/slam_nav2/nav2_path_overlay.png` with route metadata in
+`nav2_goal_result.json`.
 
 ## Tests
 

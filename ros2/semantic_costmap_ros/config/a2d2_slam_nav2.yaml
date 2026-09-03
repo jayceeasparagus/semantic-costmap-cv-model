@@ -42,3 +42,10 @@ slam_nav2_verifier:
     base_frame: base_link
     output_path: outputs/slam_nav2/integration_result.json
     timeout_seconds: 120.0
+
+nav2_goal_demo:
+  ros__parameters:
+    output_dir: outputs/slam_nav2
+    goal_search_min_m: 8.0
+    goal_search_max_m: 30.0
+    goal_search_width_m: 5.0
