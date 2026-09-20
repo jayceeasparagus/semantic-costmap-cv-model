@@ -12,6 +12,7 @@ from semantic_costmap.config import class_colors
 from semantic_costmap.costmap import costmap_to_rgb
 from semantic_costmap.mapping import Pose2D
 from semantic_costmap.pipeline import FrameResult
+from semantic_costmap.planning import RouteResult
 
 
 FRAME_PATTERN = re.compile(r"_(\d{9})\.(?:png|npz)$")
@@ -90,7 +91,11 @@ def load_pose_csv(path: str | Path) -> dict[str, PoseRecord]:
     return records
 
 
-def render_frame(result: FrameResult, frame_id: str) -> Image.Image:
+def render_frame(
+    result: FrameResult,
+    frame_id: str,
+    route: RouteResult | None = None,
+) -> Image.Image:
     """Create a four-panel RGB/segmentation/fusion/costmap debug frame."""
 
     panel_size = (480, 302)
@@ -123,6 +128,27 @@ def render_frame(result: FrameResult, frame_id: str) -> Image.Image:
         ),
         mode="RGB",
     ).resize(panel_size, Image.Resampling.NEAREST)
+    if route is not None and route.found and len(route.cells) > 0:
+        route_draw = ImageDraw.Draw(costmap)
+        grid_height, grid_width = result.costmap.costs.shape
+        route_points = [
+            (
+                int(column / grid_width * panel_size[0]),
+                int((grid_height - 1 - row) / grid_height * panel_size[1]),
+            )
+            for row, column in route.cells
+        ]
+        if len(route_points) > 1:
+            route_draw.line(route_points, fill=(30, 90, 255), width=4)
+        for point, color in (
+            (route_points[0], (0, 220, 0)),
+            (route_points[-1], (255, 220, 0)),
+        ):
+            route_draw.ellipse(
+                (*tuple(value - 7 for value in point),
+                 *tuple(value + 7 for value in point)),
+                fill=color,
+            )
 
     header_height = 36
     canvas = Image.new(
@@ -134,7 +160,7 @@ def render_frame(result: FrameResult, frame_id: str) -> Image.Image:
     canvas.paste(semantic_overlay, (panel_size[0], header_height))
     canvas.paste(painted_overlay, (0, header_height + panel_size[1]))
     canvas.paste(costmap, (panel_size[0], header_height + panel_size[1]))
-    labels = "RGB | semantic overlay | painted LiDAR | vehicle costmap"
+    labels = "RGB | semantic overlay | painted LiDAR | costmap + local route"
     ImageDraw.Draw(canvas).text(
         (12, 10),
         f"Frame {frame_id} - {labels}",

@@ -4,6 +4,7 @@
 import argparse
 import json
 from pathlib import Path
+import time
 
 import numpy as np
 from PIL import Image
@@ -19,6 +20,7 @@ from semantic_costmap.playback import (
     render_frame,
     summarize_timings,
 )
+from semantic_costmap.planning import LocalRoutePlanner, RoutePlannerConfig
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,6 +55,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--global-map-range", type=float, default=100.0)
     parser.add_argument("--dynamic-decay-seconds", type=float, default=2.0)
+    parser.add_argument("--route-goal-forward", type=float, default=12.0)
+    parser.add_argument("--route-min-forward", type=float, default=5.0)
+    parser.add_argument("--route-lateral-tolerance", type=float, default=5.0)
     return parser.parse_args()
 
 
@@ -84,6 +89,13 @@ def main() -> None:
                 dynamic_decay_seconds=args.dynamic_decay_seconds,
             )
         )
+    route_planner = LocalRoutePlanner(
+        RoutePlannerConfig(
+            goal_forward_m=args.route_goal_forward,
+            minimum_goal_forward_m=args.route_min_forward,
+            goal_lateral_tolerance_m=args.route_lateral_tolerance,
+        )
+    )
 
     rendered_frames = []
     frame_records = []
@@ -100,11 +112,21 @@ def main() -> None:
                 pose_record.timestamp,
             )
             last_pose_timestamp = pose_record.timestamp
-        rendered = render_frame(result, pair.frame_id)
+        route_start = time.perf_counter()
+        route = route_planner.plan(result.costmap)
+        route_ms = (time.perf_counter() - route_start) * 1000.0
+        frame_timings = dict(result.timings_ms)
+        frame_timings["route"] = route_ms
+        frame_timings["total"] = result.timings_ms["total"] + route_ms
+        rendered = render_frame(result, pair.frame_id, route)
         rendered.save(frame_directory / f"frame_{index:03d}.png")
         rendered_frames.append(rendered)
         frame_records.append(
-            {"frame_id": pair.frame_id, "timings_ms": result.timings_ms}
+            {
+                "frame_id": pair.frame_id,
+                "timings_ms": frame_timings,
+                "route": route.to_dict(),
+            }
         )
         print(
             f"[{index + 1}/{len(pairs)}] {pair.frame_id}: "
@@ -128,6 +150,14 @@ def main() -> None:
         "checkpoint_epoch": pipeline.segmenter.epoch,
         "summary": summary,
         "frames": frame_records,
+    }
+    route_records = [record["route"] for record in frame_records]
+    benchmark["route_planning"] = {
+        "frames_with_route": sum(record["found"] for record in route_records),
+        "frame_count": len(route_records),
+        "mean_path_points": float(
+            np.mean([record["point_count"] for record in route_records])
+        ),
     }
     if accumulator is not None:
         accumulated = accumulator.grid(last_pose_timestamp)
