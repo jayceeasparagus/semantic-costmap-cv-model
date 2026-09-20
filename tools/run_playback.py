@@ -49,6 +49,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     parser.add_argument("--max-frames", type=int, default=8)
     parser.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="Keep every Nth paired frame before applying --max-frames",
+    )
+    parser.add_argument("--gif-fps", type=float, default=2.5)
+    parser.add_argument(
         "--poses-csv",
         type=Path,
         help="CSV with frame_id,timestamp,x,y,yaw map-to-base poses",
@@ -66,7 +73,13 @@ def main() -> None:
     pairs = discover_frame_pairs(args.image_dir, args.lidar_dir)
     if not pairs:
         raise FileNotFoundError("no paired A2D2 frames were found")
-    pairs = pairs[: args.max_frames]
+    if args.stride < 1:
+        raise ValueError("stride must be at least one")
+    if args.gif_fps <= 0.0:
+        raise ValueError("gif-fps must be positive")
+    pairs = pairs[:: args.stride]
+    if args.max_frames > 0:
+        pairs = pairs[: args.max_frames]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     frame_directory = args.output_dir / "frames"
     frame_directory.mkdir(parents=True, exist_ok=True)
@@ -138,7 +151,7 @@ def main() -> None:
         gif_path,
         save_all=True,
         append_images=rendered_frames[1:],
-        duration=400,
+        duration=int(round(1000.0 / args.gif_fps)),
         loop=0,
         optimize=False,
     )
