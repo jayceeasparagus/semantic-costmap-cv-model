@@ -2,9 +2,9 @@
 
 ## 1. Purpose
 
-The pipeline converts synchronized RGB and LiDAR observations into a metric
-semantic costmap that can be consumed by Nav2. It separates learned perception
-from geometry and navigation so each stage can be inspected and tested.
+The pipeline converts synchronized RGB and LiDAR observations into a persistent
+semantic map. It separates learned perception, sensor geometry, and temporal
+map fusion so each stage can be inspected and tested independently.
 
 ## 2. End-to-end data flow
 
@@ -16,13 +16,13 @@ CameraInfo/calibration --------> pixel projection ----+       |
                                                               v
                                                XYZ + class probabilities
                                                               |
-                                             vehicle-frame rasterization
+                                               frame-level rasterization
                                                               |
-                                                   local semantic costmap
-                                                    /                  \
-                                   Nav2 max-merge              map-frame pose
+                                                   semantic grid + confidence
                                                                    |
-                                                         persistent accumulator
+                                                         pose-aware accumulator
+                                                                   |
+                                                         persistent global map
 ```
 
 ## 3. Semantic segmentation
@@ -66,10 +66,11 @@ A2D2's `.npz` file includes reference `row` and `col` values, but production
 code does not consume them. The calibration validator compares those values
 against independently projected coordinates as a correctness test.
 
-## 5. Local costmap generation
+## 5. Frame-level semantic grid
 
 Camera-painted points are transformed into the vehicle frame, filtered by
-height and confidence, and assigned to grid cells:
+height and confidence, and assigned to grid cells. This grid is an
+intermediate representation for mapping, not a separate navigation product:
 
 ```text
 cell_x = floor((point_x - origin_x) / resolution)
@@ -100,7 +101,7 @@ a CSV, it also accumulates every local grid into one persistent global map.
 Offline file playback models the same per-frame flow that the ROS nodes execute
 on live messages and TF poses.
 
-## 7. ROS 2 and Nav2
+## 7. Optional ROS 2 and Nav2 integration
 
 `semantic_costmap_node` uses `CameraInfo` and TF rather than dataset-specific
 pixel coordinates. It publishes:
@@ -117,8 +118,9 @@ Nav2 stack composes layers as:
 static map + obstacle/voxel layer + semantic layer + inflation layer
 ```
 
-Thus this project contributes context-aware costs while Nav2 continues to own
-map storage, inflation, and path-planner interfaces.
+Thus the core project contributes the semantic perception and mapping data;
+Nav2 remains an optional downstream consumer. The main offline demonstration
+does not require ROS 2, Nav2, or a route planner.
 
 The supplied Nav2 parameter template places the standard `InflationLayer`
 after the semantic layer. Inflation expands lethal costs around obstacles by a

@@ -1,7 +1,7 @@
-# Semantic Costmap Perception Pipeline
+# Semantic Mapping from Camera and LiDAR
 
-An end-to-end perception project that combines camera semantics with LiDAR
-geometry and exposes the result as ROS 2 and Nav2 costmaps.
+An undergraduate-level autonomous-vehicle perception project that builds a
+persistent semantic map while a vehicle moves through an environment.
 
 ```text
 RGB frame -> U-Net -> per-pixel semantic probabilities
@@ -9,17 +9,25 @@ RGB frame -> U-Net -> per-pixel semantic probabilities
 LiDAR + camera calibration -------+-> semantically painted 3D points
                                          |
                                          v
-                                vehicle-relative cost grid
+                                frame-level semantic grid
                                          |
-                         +---------------+----------------+
-                         |                                |
-                    Nav2 layer                 SLAM pose accumulation
+                              pose-aligned map fusion
+                                         |
+                              persistent semantic map
 ```
 
-The camera predicts **what** is present, LiDAR measures **where** it is, and an
-existing localization or SLAM system supplies poses for persistent mapping.
-The project deliberately uses Nav2 and SLAM Toolbox as infrastructure instead
-of recreating navigation and localization.
+The camera predicts **what** is present, LiDAR measures **where** it is, and
+vehicle poses place observations into a shared map frame. The primary demo is
+an offline A2D2 sequence replay; ROS 2, SLAM Toolbox, and Nav2 are optional
+integration paths rather than requirements for the core project.
+
+## Project scope
+
+The main question is: can synchronized camera and LiDAR observations be fused
+into a useful semantic map of the road environment? The project focuses on
+drivable ground, non-drivable regions, static obstacles, dynamic obstacles,
+and unknown space. Route planning is kept as an optional experiment and is not
+part of the main mapping benchmark.
 
 ## Results
 
@@ -35,15 +43,15 @@ An eight-frame dense-costmap CPU playback ran at **0.60 FPS**. U-Net inference
 averaged 1535.4 ms, while projection, semantic fusion, and costmap generation
 together averaged 30.4 ms. See [benchmark results](docs/benchmark_results.md).
 
-## Navigation classes
+## Semantic classes
 
-| ID | Class | Nav2 cost | Meaning |
+| ID | Class | Mapping meaning |
 |---:|---|---:|---|
-| 0 | `drivable` | 0 | preferred ground |
-| 1 | `non_drivable` | 220 | strongly avoid |
-| 2 | `static_obstacle` | 254 | fixed collision hazard |
-| 3 | `dynamic_obstacle` | 254 | moving collision hazard |
-| 4 | `background` | skipped | sky and non-spatial context |
+| 0 | `drivable` | preferred ground |
+| 1 | `non_drivable` | strongly avoid |
+| 2 | `static_obstacle` | fixed collision hazard |
+| 3 | `dynamic_obstacle` | temporary collision hazard |
+| 4 | `background` | sky and non-spatial context |
 
 Raw LiDAR obstacle evidence can raise a cell's cost but semantic predictions
 cannot lower it. Cells outside observed rays remain unknown.
@@ -88,13 +96,13 @@ python tools/validate_calibration_projection.py
 # 3. Attach semantic probabilities and costs to 3D points.
 python tools/paint_semantic_points.py --device cpu
 
-# 4. Rasterize the painted cloud into a local metric grid.
+# 4. Rasterize the painted cloud into a frame-level metric grid.
 python tools/generate_costmap.py
 
-# 5. Process a synchronized frame sequence and measure latency.
+# 5. Replay a synchronized sequence and measure latency.
 python tools/run_playback.py --device cpu --max-frames 8
 
-# 6. Place local grids into a persistent map using example poses.
+# 6. Accumulate frame-level grids into a persistent map.
 python tools/demo_pose_accumulation.py
 ```
 
@@ -103,12 +111,17 @@ For pose-aligned sequence accumulation, provide a CSV containing
 playback command. These are map-to-base poses from odometry, localization, or
 SLAM.
 
-Each tool writes inspectable images and arrays under `outputs/`. Detailed data
-flow and equations are in [the architecture guide](docs/architecture.md).
+Each tool writes inspectable images and arrays under `outputs/`. The playback
+GIF shows the RGB image, semantic overlay, painted LiDAR, and frame-level
+semantic grid. When poses are supplied, it also writes the persistent semantic
+map, confidence map, and trajectory preview. Detailed data flow and equations
+are in [the architecture guide](docs/architecture.md).
 
-## ROS 2 and Nav2
+## Optional ROS 2 integration
 
-The ROS packages target ROS 2 Jazzy:
+The ROS packages target ROS 2 Jazzy and wrap the same tested Python pipeline in
+topics and transforms. They are included for robotics integration practice;
+they are not needed to reproduce the primary offline mapping result.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -123,16 +136,16 @@ and TF data. It publishes a semantic mask, painted cloud, and local
 `OccupancyGrid`. `semantic_map_accumulator` uses the standard
 `map -> odom -> base_link` TF chain to publish a persistent semantic grid.
 
-The C++ `semantic_costmap_layer` plugin max-merges either grid into Nav2 before
-inflation. Configuration examples are in the [ROS 2 node](docs/ros2_node.md),
-[Nav2 layer](docs/nav2_layer.md), and [SLAM accumulation](docs/slam_accumulation.md)
-guides.
+The C++ `semantic_costmap_layer` plugin can expose the semantic grid to Nav2,
+while SLAM Toolbox can provide corrected map-frame poses. Configuration
+examples are in the [ROS 2 node](docs/ros2_node.md), [Nav2 layer](docs/nav2_layer.md),
+and [SLAM accumulation](docs/slam_accumulation.md) guides.
 
 `ros2/semantic_costmap_ros/config/nav2_semantic_layers.yaml` configures Nav2's
 standard inflation layer after the semantic layer for both local and global
 costmaps.
 
-The deterministic headless Nav2 planning proof can be run with:
+The deterministic Nav2 planning proof is an optional integration test:
 
 ```bash
 export PYTHONPATH="$PWD/ros2/semantic_costmap_ros:$PYTHONPATH"
@@ -142,8 +155,8 @@ ros2 launch semantic_costmap_ros nav2_demo.launch.py
 It saves both returned paths and a route overlay under `outputs/nav2_demo/`.
 See the [end-to-end runbook](docs/end_to_end.md) for the complete workflow.
 
-With local A2D2 replay data available, one integrated launch runs replay,
-SLAM Toolbox, persistent semantic accumulation, and the Nav2 planner:
+With local A2D2 replay data available, an optional integrated launch can run
+replay, SLAM Toolbox, persistent semantic accumulation, and Nav2:
 
 ```bash
 ros2 launch semantic_costmap_ros a2d2_slam_nav2.launch.py
@@ -151,12 +164,9 @@ ros2 launch semantic_costmap_ros a2d2_slam_nav2.launch.py
 
 SLAM Toolbox publishes `map -> odom`; replay publishes `odom -> base_link`;
 and the accumulator transforms each painted cloud through that composed pose.
-Nav2's global costmap max-merges `/semantic_global_costmap` through the custom
-C++ layer before inflation. A successful live wiring check is written to
-`outputs/slam_nav2/integration_result.json`. The launch also selects a distant
-low-cost goal cell, requests a Nav2 path, and saves
-`outputs/slam_nav2/nav2_path_overlay.png` with route metadata in
-`nav2_goal_result.json`.
+Nav2's global costmap can max-merge `/semantic_global_costmap` through the
+custom C++ layer before inflation. This verifies system wiring, not mapping
+accuracy or vehicle navigation performance.
 
 ## Tests
 
@@ -165,12 +175,11 @@ source .venv/bin/activate
 tools/run_checks.sh
 ```
 
-The complete local check runs 36 Python tests, builds both ROS packages, runs
-five ROS/C++ tests, verifies plugin registration, and performs node smoke
-tests. The A2D2 integration test skips when local data or the checkpoint is not
-available. Portable Python checks also run in GitHub Actions.
+The complete local check runs the Python tests, builds both ROS packages, and
+performs ROS smoke tests when ROS dependencies are installed. The A2D2
+integration test skips when local data or the checkpoint is unavailable.
 
-## Docker
+## Optional Docker environment
 
 ```bash
 docker compose build
@@ -197,10 +206,8 @@ outputs/                 Generated artifacts and checkpoints (ignored)
 
 ## Scope and limitations
 
-This is a tested offline and headless ROS integration, not a vehicle-certified
-system. The included A2D2 sample provides camera-frame LiDAR points; the code
-still computes image projection independently from calibration. The ROS
-integration uses bus odometry as SLAM Toolbox's initial motion estimate and
-laser scan matching to provide the map-frame correction. This demonstrates the
-software integration, not localization accuracy. GPU inference or model
-optimization is needed for practical real-time frame rates.
+This is a tested offline mapping pipeline, not a vehicle-certified system. The
+main map demo uses bus-derived odometry; it is not a claim of full SLAM
+accuracy. The ROS integration demonstrates how SLAM Toolbox and Nav2 could be
+connected, but those systems are outside the core mapping contribution. GPU
+inference or model optimization is needed for practical real-time rates.

@@ -44,9 +44,10 @@ projection math, and costmap behavior. Run all non-ROS Python tests with:
 python -m pytest
 ```
 
-## ROS 2 and Docker
+## Optional ROS 2 and Docker
 
-The offline Python pipeline is tested first. ROS 2 then wraps stable behavior in
-topics and transforms, while Docker records a reproducible CPU environment.
-Nav2 and SLAM remain upstream systems that this project integrates with rather
-than recreates.
+The offline Python pipeline is the primary project path. ROS 2 can wrap the
+stable perception and mapping pieces in topics and transforms, while Docker
+records a reproducible CPU environment. Nav2, SLAM, and the small route
+planner are optional integrations; they are not required to run or evaluate
+the semantic map.

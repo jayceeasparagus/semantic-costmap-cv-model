@@ -68,6 +68,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dynamic-decay-seconds", type=float, default=2.0)
     parser.add_argument("--map-gap-fill-iterations", type=int, default=1)
     parser.add_argument("--map-gap-fill-min-neighbors", type=int, default=5)
+    parser.add_argument(
+        "--plan-route",
+        action="store_true",
+        help="Optionally run the experimental frame-level route planner",
+    )
     parser.add_argument("--route-goal-forward", type=float, default=12.0)
     parser.add_argument("--route-min-forward", type=float, default=5.0)
     parser.add_argument("--route-lateral-tolerance", type=float, default=5.0)
@@ -110,13 +115,15 @@ def main() -> None:
                 map_gap_fill_min_neighbors=args.map_gap_fill_min_neighbors,
             )
         )
-    route_planner = LocalRoutePlanner(
-        RoutePlannerConfig(
-            goal_forward_m=args.route_goal_forward,
-            minimum_goal_forward_m=args.route_min_forward,
-            goal_lateral_tolerance_m=args.route_lateral_tolerance,
+    route_planner = None
+    if args.plan_route:
+        route_planner = LocalRoutePlanner(
+            RoutePlannerConfig(
+                goal_forward_m=args.route_goal_forward,
+                minimum_goal_forward_m=args.route_min_forward,
+                goal_lateral_tolerance_m=args.route_lateral_tolerance,
+            )
         )
-    )
 
     rendered_frames = []
     frame_records = []
@@ -133,22 +140,24 @@ def main() -> None:
                 pose_record.timestamp,
             )
             last_pose_timestamp = pose_record.timestamp
-        route_start = time.perf_counter()
-        route = route_planner.plan(result.costmap)
-        route_ms = (time.perf_counter() - route_start) * 1000.0
         frame_timings = dict(result.timings_ms)
-        frame_timings["route"] = route_ms
-        frame_timings["total"] = result.timings_ms["total"] + route_ms
+        route = None
+        if route_planner is not None:
+            route_start = time.perf_counter()
+            route = route_planner.plan(result.costmap)
+            route_ms = (time.perf_counter() - route_start) * 1000.0
+            frame_timings["route"] = route_ms
+            frame_timings["total"] = result.timings_ms["total"] + route_ms
         rendered = render_frame(result, pair.frame_id, route)
         rendered.save(frame_directory / f"frame_{index:03d}.png")
         rendered_frames.append(rendered)
-        frame_records.append(
-            {
-                "frame_id": pair.frame_id,
-                "timings_ms": frame_timings,
-                "route": route.to_dict(),
-            }
-        )
+        frame_record = {
+            "frame_id": pair.frame_id,
+            "timings_ms": frame_timings,
+        }
+        if route is not None:
+            frame_record["route"] = route.to_dict()
+        frame_records.append(frame_record)
         print(
             f"[{index + 1}/{len(pairs)}] {pair.frame_id}: "
             f"{result.timings_ms['total']:.1f} ms"
@@ -172,14 +181,17 @@ def main() -> None:
         "summary": summary,
         "frames": frame_records,
     }
-    route_records = [record["route"] for record in frame_records]
-    benchmark["route_planning"] = {
-        "frames_with_route": sum(record["found"] for record in route_records),
-        "frame_count": len(route_records),
-        "mean_path_points": float(
-            np.mean([record["point_count"] for record in route_records])
-        ),
-    }
+    if args.plan_route:
+        route_records = [record["route"] for record in frame_records]
+        benchmark["route_planning"] = {
+            "frames_with_route": sum(
+                record["found"] for record in route_records
+            ),
+            "frame_count": len(route_records),
+            "mean_path_points": float(
+                np.mean([record["point_count"] for record in route_records])
+            ),
+        }
     if accumulator is not None:
         accumulated = accumulator.grid(last_pose_timestamp)
         semantic_classes = accumulator.semantic_grid(last_pose_timestamp)

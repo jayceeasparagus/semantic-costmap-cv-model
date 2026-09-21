@@ -1,11 +1,11 @@
 # End-to-end runbook
 
-This project has two complementary demonstrations:
+This project has one primary demonstration and one optional integration path:
 
-1. the offline A2D2 pipeline, which runs the trained U-Net, calibrates LiDAR
+1. the offline A2D2 semantic-mapping pipeline, which runs the trained U-Net, calibrates LiDAR
    points, paints them with semantic predictions, and rasterizes a local
-   metric costmap;
-2. the ROS 2 integration, which replays A2D2 sensors, supplies odometry,
+   metric semantic grid and persistent map;
+2. an optional ROS 2 integration, which replays A2D2 sensors, supplies odometry,
    lets SLAM Toolbox publish `map -> odom`, and exposes the semantic grid to
    Nav2.
 
@@ -37,7 +37,10 @@ python tools/run_playback.py --device cpu --max-frames 8 \
   --poses-csv outputs/poses/20180807_bus_odometry.csv
 ```
 
-## ROS 2 replay and SLAM
+## Optional ROS 2 replay and SLAM integration
+
+This section is an extension for experimenting with runtime middleware. It is
+not required for the main offline mapping result.
 
 The ROS packages target Jazzy. After installing ROS dependencies and building
 the workspace:
@@ -59,7 +62,7 @@ local and persistent semantic grids.
 This replay is deterministic and finite by default. It requires local A2D2
 camera, LiDAR, calibration, and bus files; those files are never committed.
 
-To attach the Nav2 planner and custom global semantic layer to the same graph,
+To optionally attach the Nav2 planner and custom global semantic layer to the same graph,
 use:
 
 ```bash
@@ -73,7 +76,7 @@ after observing the SLAM map, `map -> odom`, the composed
 `map -> base_link` pose, non-empty persistent semantic evidence, and Nav2's
 global costmap.
 
-## Headless Nav2 planning proof
+## Optional headless Nav2 planning proof
 
 The Nav2 demo is independent of the large A2D2 download. It uses a small
 deterministic map and a switchable semantic barrier so the planner behavior is
@@ -110,9 +113,8 @@ costmap node and use Nav2's normal controller and behavior-tree stack.
 - Ray tracing marks observed free space, obstacle footprints improve sparse
   returns, and the Nav2 inflation layer expands collision cost around lethal
   cells.
-- The integrated launch demonstrates bus-derived odometry corrected through
-  SLAM Toolbox and consumed by semantic accumulation and Nav2, but it is not a
-  claim of localization accuracy.
+- The integrated launch is an optional systems demonstration using bus-derived
+  odometry and SLAM Toolbox; it is not a claim of localization accuracy.
 - The measured local CPU playback rate and model metrics in
   `docs/benchmark_results.md` are the project’s reported performance numbers;
   no real-time claim is made for an arbitrary robot computer.

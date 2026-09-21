@@ -1,6 +1,6 @@
 # Demonstration checklist
 
-This sequence verifies the complete project with inspectable artifacts. Run it
+This sequence verifies the primary semantic-mapping workflow with inspectable artifacts. Run it
 from the repository root after placing the local A2D2 samples and epoch-29
 checkpoint in their documented locations.
 
@@ -29,10 +29,11 @@ Expected outputs:
 | segmentation | `outputs/inference/*_overlay.png` |
 | calibration | `outputs/calibration/projection_validation.png` |
 | point painting | `outputs/fusion/painted_points_overlay.png` |
-| local grid | `outputs/costmap/semantic_costmap_preview.png` |
+| frame-level semantic grid | `outputs/costmap/semantic_costmap_preview.png` |
 | playback | `outputs/playback/semantic_costmap_playback.gif` |
 | benchmark | `outputs/playback/benchmark.json` |
-| accumulation | `outputs/accumulation/accumulated_costmap_preview.png` |
+| persistent map | `outputs/accumulation/accumulated_costmap_preview.png` |
+| map confidence | `outputs/accumulation/accumulated_confidence.png` |
 
 Run all automated checks afterward:
 
@@ -40,7 +41,5 @@ Run all automated checks afterward:
 tools/run_checks.sh
 ```
 
-For a ROS demonstration, build and source the workspace, launch the nodes, and
-show `/semantic_mask`, `/painted_points`, `/semantic_costmap`, and
-`/semantic_global_costmap` in RViz2. A live or recorded sensor source must
-provide `image`, `camera_info`, `points`, and the required TF chain.
+The ROS 2, SLAM, Nav2, and route-planning examples are optional follow-up
+demonstrations. They are not needed to reproduce the primary offline map.

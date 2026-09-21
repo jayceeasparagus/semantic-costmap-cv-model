@@ -1,9 +1,10 @@
-# Multi-frame playback and benchmarks
+# Multi-frame semantic mapping playback and benchmarks
 
 `tools/run_playback.py` keeps the model and calibration loaded while processing
 paired A2D2 frames. Each rendered frame shows the RGB image, semantic overlay,
-painted LiDAR returns, and vehicle-relative costmap. The tool saves an animated
-GIF, individual PNG frames, and machine-readable latency results.
+painted LiDAR returns, and a frame-level semantic grid. With poses, the same
+frames are fused into a persistent map. The tool saves an animated GIF,
+individual PNG frames, and machine-readable latency results.
 
 Expected local data layout:
 
@@ -45,4 +46,15 @@ GPU timing should be measured on the target deployment hardware before making a
 real-time claim.
 
 With poses, the tool additionally saves `accumulated_costmap.npz` and
-`accumulated_costmap_preview.png` in the selected output directory.
+`accumulated_costmap_preview.png`, `accumulated_confidence.png`, and
+`odometry_trajectory.png` in the selected output directory.
+
+The default command measures mapping only. The experimental frame-level route
+planner is intentionally opt-in:
+
+```bash
+python tools/run_playback.py --device cpu --max-frames 8 --plan-route
+```
+
+Route-planning timings are included in the benchmark only when this flag is
+used, so the main benchmark describes the semantic-mapping pipeline directly.
