@@ -9,8 +9,8 @@ individual PNG frames, and machine-readable latency results.
 Expected local data layout:
 
 ```text
-data/raw/a2d2_playback/camera/*.png
-data/raw/a2d2_playback/lidar/*.npz
+data/raw/sequential_playback/camera/*.png
+data/raw/sequential_playback/lidar/*.npz
 ```
 
 Run a CPU benchmark with:

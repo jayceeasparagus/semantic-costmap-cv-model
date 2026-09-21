@@ -76,10 +76,10 @@ Place the trained checkpoint at:
 outputs/checkpoints/epoch29_restore/best_semantic_unet.pt
 ```
 
-The default demos also expect paired A2D2 front-center samples under
-`data/raw/a2d2_sample/` and playback frames under
-`data/raw/a2d2_playback/`. Data, checkpoints, and generated outputs are ignored
-by Git.
+The default single-frame demos expect paired samples under
+`data/raw/a2d2_sample/`. The long playback demo expects the 600-frame sequence
+under `data/raw/sequential_playback/`. Data, checkpoints, and generated outputs
+are ignored by Git.
 
 ## Offline demonstration
 

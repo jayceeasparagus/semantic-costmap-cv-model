@@ -32,12 +32,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--image-dir",
         type=Path,
-        default=Path("data/raw/a2d2_playback/camera"),
+        default=Path("data/raw/sequential_playback/camera"),
     )
     parser.add_argument(
         "--lidar-dir",
         type=Path,
-        default=Path("data/raw/a2d2_playback/lidar"),
+        default=Path("data/raw/sequential_playback/lidar"),
     )
     parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT_PATH)
     parser.add_argument(
