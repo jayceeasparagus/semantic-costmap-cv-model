@@ -7,9 +7,6 @@ build/
 dist/
 install/
 log/
-build_ros/
-install_ros/
-log_ros*/
 .ipynb_checkpoints/
 
 data/**
