@@ -15,6 +15,8 @@ The system processes each driving frame through four stages:
 The camera provides semantic meaning, LiDAR provides metric 3D geometry, and
 recorded vehicle poses place observations into a shared map frame.
 
+![Accumulated semantic map](docs/assets/semantic_map_preview.png)
+
 ## Pipeline
 
 ```text
@@ -78,6 +80,25 @@ python tools/run_playback.py \
 
 This additionally saves the accumulated semantic map, confidence map, and
 trajectory preview.
+
+For a reusable command with your own synchronized frame folders:
+
+```bash
+python tools/semantic_map.py \
+  --camera-dir path/to/camera_frames \
+  --lidar-dir path/to/lidar_frames \
+  --poses-csv path/to/poses.csv \
+  --output-dir outputs/my_map
+```
+
+For a camera-only video, the wrapper writes a semantic overlay and confidence
+panel to an MP4. It does not create a 3D map without LiDAR:
+
+```bash
+python tools/semantic_map.py \
+  --video path/to/drive.mp4 \
+  --output-dir outputs/video_demo
+```
 
 ## Setup
 
