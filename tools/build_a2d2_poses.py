@@ -34,7 +34,7 @@ def main() -> None:
     )
     write_pose_csv(records, args.output_csv)
     print(f"Frames written: {len(records)}")
-    print("Pose source: A2D2 bus-derived odometry (not SLAM ground truth)")
+    print("Pose source: A2D2 bus-derived odometry (relative replay poses)")
     print(f"Output: {args.output_csv}")
     print(
         f"Final pose: x={records[-1].x:.2f} m, "

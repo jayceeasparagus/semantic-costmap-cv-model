@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "semantic-costmap"
 version = "0.1.0"
-description = "Camera-LiDAR semantic costmap generation for ROS 2 and Nav2"
+description = "Camera-LiDAR semantic mapping from A2D2 driving data"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.24",

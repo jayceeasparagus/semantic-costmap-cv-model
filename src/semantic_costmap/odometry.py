@@ -4,7 +4,7 @@ The A2D2 bus file contains one record for each front-center camera frame.  A
 record also contains short, timestamped signal histories.  This module
 flattens those histories, interpolates vehicle speed and yaw rate at each
 camera timestamp, and integrates a simple unicycle model.  The result is
-odometry for replay and debugging; it is not SLAM ground truth.
+odometry for replay and debugging; it is not ground-truth localization.
 """
 
 from __future__ import annotations

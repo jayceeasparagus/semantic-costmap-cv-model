@@ -98,52 +98,24 @@ are processed. `run_playback.py` pairs camera and LiDAR files by frame ID,
 generates debug panels and a GIF, and records load, inference, projection,
 fusion, costmap, and total latency. When given timestamped map-to-base poses in
 a CSV, it also accumulates every local grid into one persistent global map.
-Offline file playback models the same per-frame flow that the ROS nodes execute
-on live messages and TF poses.
+Offline file playback is the primary runtime path: it makes the data flow
+deterministic and keeps the project easy to reproduce without middleware.
 
-## 7. Optional ROS 2 and Nav2 integration
-
-`semantic_costmap_node` uses `CameraInfo` and TF rather than dataset-specific
-pixel coordinates. It publishes:
-
-- `semantic_mask` as `sensor_msgs/Image`;
-- `painted_points` as `sensor_msgs/PointCloud2`;
-- `semantic_costmap` as `nav_msgs/OccupancyGrid`.
-
-The C++ `semantic_costmap_layer` subscribes to an occupancy grid, transforms
-cells into the Nav2 master frame, and performs a maximum-cost merge. A normal
-Nav2 stack composes layers as:
-
-```text
-static map + obstacle/voxel layer + semantic layer + inflation layer
-```
-
-Thus the core project contributes the semantic perception and mapping data;
-Nav2 remains an optional downstream consumer. The main offline demonstration
-does not require ROS 2, Nav2, or a route planner.
-
-The supplied Nav2 parameter template places the standard `InflationLayer`
-after the semantic layer. Inflation expands lethal costs around obstacles by a
-configurable robot-safety radius rather than duplicating that algorithm inside
-the custom plugin.
-
-## 8. Pose and SLAM accumulation
+## 7. Pose-aware accumulation
 
 `tools/build_a2d2_poses.py` reads the actual A2D2 list-of-frame-records bus JSON.
 It aligns `vehicle_speed` and `angular_velocity_omega_z` to each camera
 timestamp, converts km/h and degrees/s to SI units, and integrates a planar
-unicycle model. The output is explicitly **bus-derived odometry**, not SLAM
-ground truth. A camera metadata directory can be supplied so `cam_tstamp` is
+unicycle model. The output is explicitly **bus-derived odometry**, not
+ground-truth localization. A camera metadata directory can be supplied so `cam_tstamp` is
 used instead of the bus record timestamp. The initial yaw is an explicit
 assumption because GPS samples alone do not provide a reliable local heading
 in this small replay.
 
-SLAM Toolbox remains an upstream pose provider for the ROS path; this project
-does not implement scan matching or loop closure. The accumulator looks up the
-observation pose through the standard `map -> odom -> base_link` TF chain and
-places each local observation into a global metric grid. Offline playback can
-consume the generated CSV and saves both `accumulated_costmap_preview.png` and
-`odometry_trajectory.png`.
+The accumulator consumes the recorded pose from the CSV and places each local
+observation into a global metric grid. It does not implement scan matching or
+loop closure. Offline playback saves both
+`accumulated_costmap_preview.png` and `odometry_trajectory.png`.
 
 Static evidence uses confidence-weighted semantic voting plus conservative
 maximum-cost persistence. Dynamic-obstacle evidence is stored separately,
@@ -152,11 +124,11 @@ any underlying static cost. This avoids permanently painting a moving vehicle
 into the map. The offline playback also exports a confidence heatmap and
 reports mean map confidence and the number of currently active dynamic cells.
 
-## 9. Safety and engineering boundaries
+## 8. Safety and engineering boundaries
 
 - Unknown space is preserved instead of treated as free.
 - Semantic evidence never lowers raw obstacle cost.
-- Stale sensor pairs and stale Nav2 semantic grids are rejected.
+- Stale sensor pairs are rejected.
 - Dynamic observations decay; static observations persist.
 - Checkpoints, datasets, and generated outputs stay outside Git.
 - Every math-heavy stage has focused tests and an inspectable offline demo.

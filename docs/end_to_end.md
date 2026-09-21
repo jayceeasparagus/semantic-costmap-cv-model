@@ -1,13 +1,10 @@
 # End-to-end runbook
 
-This project has one primary demonstration and one optional integration path:
+This project has one primary demonstration:
 
 1. the offline A2D2 semantic-mapping pipeline, which runs the trained U-Net, calibrates LiDAR
    points, paints them with semantic predictions, and rasterizes a local
-   metric semantic grid and persistent map;
-2. an optional ROS 2 integration, which replays A2D2 sensors, supplies odometry,
-   lets SLAM Toolbox publish `map -> odom`, and exposes the semantic grid to
-   Nav2.
+   metric semantic grid and persistent map.
 
 ## Offline pipeline
 
@@ -21,7 +18,7 @@ python tools/run_inference.py --device cpu
 python tools/validate_calibration_projection.py
 python tools/paint_semantic_points.py --device cpu
 python tools/generate_costmap.py
-python tools/run_playback.py --device cpu --max-frames 8
+python tools/run_playback.py --device cpu --stride 5 --max-frames 60 --gif-fps 10
 ```
 
 The commands write diagnostic images and arrays under `outputs/`. The
@@ -33,76 +30,10 @@ signals, then pass it to playback:
 
 ```bash
 python tools/build_a2d2_poses.py
-python tools/run_playback.py --device cpu --max-frames 8 \
+python tools/run_playback.py --device cpu --stride 5 --max-frames 60 \
+  --gif-fps 10 \
   --poses-csv outputs/poses/20180807_bus_odometry.csv
 ```
-
-## Optional ROS 2 replay and SLAM integration
-
-This section is an extension for experimenting with runtime middleware. It is
-not required for the main offline mapping result.
-
-The ROS packages target Jazzy. After installing ROS dependencies and building
-the workspace:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-colcon build --base-paths ros2 --symlink-install
-source install/setup.bash
-export PYTHONPATH="$PWD/ros2/semantic_costmap_ros:$PYTHONPATH"
-ros2 launch semantic_costmap_ros a2d2_slam.launch.py
-```
-
-The replay node publishes the camera, calibrated point cloud, and bus-derived
-`odom -> base_link` transform. `pointcloud_to_laserscan` converts the cloud to
-the scan interface expected by SLAM Toolbox. SLAM Toolbox owns the
-`map -> odom` transform, while the semantic node and accumulator publish the
-local and persistent semantic grids.
-
-This replay is deterministic and finite by default. It requires local A2D2
-camera, LiDAR, calibration, and bus files; those files are never committed.
-
-To optionally attach the Nav2 planner and custom global semantic layer to the same graph,
-use:
-
-```bash
-ros2 launch semantic_costmap_ros a2d2_slam_nav2.launch.py
-```
-
-The replay uses current ROS timestamps even though its pose increments come
-from recorded bus signals, because Nav2 rejects stale sensor layers. The
-integrated verifier writes `outputs/slam_nav2/integration_result.json` only
-after observing the SLAM map, `map -> odom`, the composed
-`map -> base_link` pose, non-empty persistent semantic evidence, and Nav2's
-global costmap.
-
-## Optional headless Nav2 planning proof
-
-The Nav2 demo is independent of the large A2D2 download. It uses a small
-deterministic map and a switchable semantic barrier so the planner behavior is
-easy to test:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-export PYTHONPATH="$PWD/ros2/semantic_costmap_ros:$PYTHONPATH"
-ros2 launch semantic_costmap_ros nav2_demo.launch.py
-```
-
-The client sends `ComputePathToPose` twice. It verifies that both paths reach
-the goal, the semantic-aware path avoids lethal cells, and enabling the
-semantic layer changes the route. The evidence is saved under
-`outputs/nav2_demo/`:
-
-- `planning_result.json` contains path lengths and route-change data;
-- `path_without_semantics.json` and `path_with_semantics.json` contain the
-  returned paths;
-- `path_overlay.png` shows the red semantic barrier, blue baseline route,
-  green semantic-aware route, and start/goal markers.
-
-This is a headless integration test of the costmap-to-planner connection. A
-robot deployment would replace the deterministic publisher with the semantic
-costmap node and use Nav2's normal controller and behavior-tree stack.
 
 ## What is and is not demonstrated
 
@@ -110,11 +41,10 @@ costmap node and use Nav2's normal controller and behavior-tree stack.
   depth and 3D obstacle evidence.
 - Calibration maps LiDAR returns into the camera image, and the painted labels
   are rasterized into a vehicle-frame grid.
-- Ray tracing marks observed free space, obstacle footprints improve sparse
-  returns, and the Nav2 inflation layer expands collision cost around lethal
-  cells.
-- The integrated launch is an optional systems demonstration using bus-derived
-  odometry and SLAM Toolbox; it is not a claim of localization accuracy.
+- Ray tracing marks observed free space and obstacle footprints improve sparse
+  returns.
+- Pose-aware accumulation uses recorded bus-derived odometry; it is not a
+  claim of localization accuracy.
 - The measured local CPU playback rate and model metrics in
   `docs/benchmark_results.md` are the project’s reported performance numbers;
   no real-time claim is made for an arbitrary robot computer.

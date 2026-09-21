@@ -3,8 +3,8 @@
 ## Why there are both scripts and a Python package
 
 Files in `tools/` are commands a user runs. Files in
-`src/semantic_costmap/` contain reusable logic shared by those commands, tests,
-and later ROS 2 nodes. This avoids copying model loading, class definitions, and
+`src/semantic_costmap/` contain reusable logic shared by those commands and
+tests. This avoids copying model loading, class definitions, and
 geometry code between scripts.
 
 ## `pyproject.toml`
@@ -38,16 +38,13 @@ the computer.
 ## Tests
 
 Focused tests protect model compatibility, semantic class definitions,
-projection math, and costmap behavior. Run all non-ROS Python tests with:
+projection math, and costmap behavior. Run the Python tests with:
 
 ```bash
 python -m pytest
 ```
 
-## Optional ROS 2 and Docker
+## Project boundary
 
-The offline Python pipeline is the primary project path. ROS 2 can wrap the
-stable perception and mapping pieces in topics and transforms, while Docker
-records a reproducible CPU environment. Nav2, SLAM, and the small route
-planner are optional integrations; they are not required to run or evaluate
-the semantic map.
+The repository intentionally stays as a small offline Python project. Recorded
+odometry is enough for the included pose-aware map accumulation demo.

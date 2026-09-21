@@ -11,7 +11,7 @@ python tools/run_inference.py --device cpu
 python tools/validate_calibration_projection.py
 python tools/paint_semantic_points.py --device cpu
 python tools/generate_costmap.py
-python tools/run_playback.py --device cpu --max-frames 8
+python tools/run_playback.py --device cpu --stride 5 --max-frames 60 --gif-fps 10
 python tools/demo_pose_accumulation.py
 ```
 
@@ -19,7 +19,8 @@ To use measured poses during playback, create a CSV with the columns
 `frame_id,timestamp,x,y,yaw` and run:
 
 ```bash
-python tools/run_playback.py --device cpu --poses-csv poses.csv
+python tools/run_playback.py --device cpu --stride 5 --max-frames 60 \
+  --gif-fps 10 --poses-csv poses.csv
 ```
 
 Expected outputs:
@@ -41,5 +42,5 @@ Run all automated checks afterward:
 tools/run_checks.sh
 ```
 
-The ROS 2, SLAM, Nav2, and route-planning examples are optional follow-up
-demonstrations. They are not needed to reproduce the primary offline map.
+The route-planning code is an optional experiment and is not part of the main
+mapping demonstration.

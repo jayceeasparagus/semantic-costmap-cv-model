@@ -51,14 +51,19 @@ def parse_args() -> argparse.Namespace:
         default=Path("outputs/playback"),
     )
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
-    parser.add_argument("--max-frames", type=int, default=8)
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=60,
+        help="Number of sampled frames to process (default: 60)",
+    )
     parser.add_argument(
         "--stride",
         type=int,
-        default=1,
-        help="Keep every Nth paired frame before applying --max-frames",
+        default=5,
+        help="Keep every Nth paired frame before applying --max-frames (default: 5)",
     )
-    parser.add_argument("--gif-fps", type=float, default=2.5)
+    parser.add_argument("--gif-fps", type=float, default=10.0)
     parser.add_argument(
         "--poses-csv",
         type=Path,

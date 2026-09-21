@@ -16,7 +16,7 @@ data/raw/a2d2_playback/lidar/*.npz
 Run a CPU benchmark with:
 
 ```bash
-python tools/run_playback.py --device cpu --max-frames 8
+python tools/run_playback.py --device cpu --stride 5 --max-frames 60 --gif-fps 10
 ```
 
 To accumulate the frames in a persistent map, provide map-to-base poses:
@@ -30,14 +30,16 @@ frame_id,timestamp,x,y,yaw
 ```bash
 python tools/run_playback.py \
   --device cpu \
-  --max-frames 8 \
+  --stride 5 \
+  --max-frames 60 \
+  --gif-fps 10 \
   --poses-csv poses.csv
 ```
 
 The frame ID must match the nine-digit ID in each A2D2 filename. `x`, `y`, and
 `yaw` describe the map-to-base pose in meters and radians. A real run should
-export these poses from odometry, localization, or SLAM; synthetic values are
-appropriate only for checking coordinate placement.
+export these poses from recorded odometry or localization; synthetic values
+are appropriate only for checking coordinate placement.
 
 Results are written to `outputs/playback/benchmark.json`. The benchmark reports
 load, neural-network inference, calibration projection, point fusion, costmap,

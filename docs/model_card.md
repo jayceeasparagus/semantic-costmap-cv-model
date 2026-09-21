@@ -54,8 +54,8 @@ The model was trained for an A2D2-style road domain and a navigation-oriented
 reduced taxonomy. It should not be assumed to generalize to arbitrary cameras,
 weather, terrain, or countries without evaluation. Small or rare obstacles can
 be missed, and semantic confidence is not a formal safety guarantee. Raw LiDAR
-obstacle precedence and normal Nav2 safety layers must remain enabled.
+obstacle precedence and downstream safety checks must remain enabled.
 
 The training notebook is useful for future retraining but is not required to
-run the saved checkpoint. Inference, fusion, and ROS integration are maintained
-as normal source modules rather than notebook-only code.
+run the saved checkpoint. Inference, fusion, and mapping are maintained as
+normal source modules rather than notebook-only code.

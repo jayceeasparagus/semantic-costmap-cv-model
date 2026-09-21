@@ -461,7 +461,7 @@ def save_costmap(
     output_directory: str | Path,
     costmap: SemanticCostmap,
 ) -> dict[str, Path]:
-    """Save arrays, a Nav2-map-server file, metadata, and a debug image."""
+    """Save arrays, map metadata, and a debug image."""
 
     output_directory = Path(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)

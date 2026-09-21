@@ -12,9 +12,9 @@ y += v sin(yaw + w dt / 2) dt
 yaw += w dt
 ```
 
-This is a useful deterministic replay pose source. It is not a replacement for
-SLAM: integration drifts, and the initial yaw is supplied by the user. A live
-ROS system should instead use SLAM Toolbox's `map -> odom -> base_link` TF.
+This is a useful deterministic replay pose source. Integration drifts, and the
+initial yaw is supplied by the user, so it should be treated as a relative map
+reference rather than ground-truth localization.
 
 ## Generate poses
 
@@ -40,7 +40,9 @@ accepted by `tools/run_playback.py`.
 ```bash
 python tools/run_playback.py \
   --poses-csv outputs/poses/20180807_bus_odometry.csv \
-  --max-frames 8 \
+  --stride 5 \
+  --max-frames 60 \
+  --gif-fps 10 \
   --device cpu
 ```
 
