@@ -71,6 +71,7 @@ class SemanticCostmap:
     evidence_count: np.ndarray
     obstacle_mask: np.ndarray
     config: CostmapConfig
+    confidence: np.ndarray | None = None
     semantic_mask: np.ndarray | None = None
     interpolated_free_mask: np.ndarray | None = None
     observed_free_mask: np.ndarray | None = None
@@ -224,6 +225,7 @@ def build_semantic_costmap(
     shape = (config.height, config.width)
     evidence = np.zeros(shape, dtype=np.uint16)
     class_sums = np.zeros((BACKGROUND_CLASS_ID, *shape), dtype=np.float64)
+    confidence_sums = np.zeros(shape, dtype=np.float64)
 
     points = painted.points_vehicle
     rows, columns, in_grid = _cell_indices(points, config)
@@ -247,19 +249,26 @@ def build_semantic_costmap(
         out=np.zeros_like(navigation_probabilities),
         where=probability_totals > 1e-12,
     )
+    point_confidence = painted.confidence[semantic_valid].astype(np.float64)
 
     np.add.at(evidence, (semantic_rows, semantic_columns), 1)
     for class_id in range(BACKGROUND_CLASS_ID):
         np.add.at(
             class_sums[class_id],
             (semantic_rows, semantic_columns),
-            navigation_probabilities[:, class_id],
+            navigation_probabilities[:, class_id] * point_confidence,
         )
+    np.add.at(
+        confidence_sums,
+        (semantic_rows, semantic_columns),
+        point_confidence,
+    )
 
     populated = evidence >= config.minimum_points_per_cell
     semantic_mask = populated.copy()
     costs = np.full(shape, UNKNOWN_COST, dtype=np.uint8)
     class_ids = np.full(shape, BACKGROUND_CLASS_ID, dtype=np.uint8)
+    confidence = np.zeros(shape, dtype=np.float32)
     if populated.any():
         class_ids[populated] = class_sums[:, populated].argmax(axis=0)
         semantic_cost_values = np.asarray(
@@ -271,6 +280,13 @@ def build_semantic_costmap(
             semantic_cost_values[:, None] * class_sums[:, populated]
         ).sum(axis=0) / total_weight
         costs[populated] = np.rint(weighted_cost).astype(np.uint8)
+        dominant_probability = class_sums[:, populated].max(axis=0) / total_weight
+        mean_source_confidence = confidence_sums[populated] / evidence[populated]
+        confidence[populated] = np.clip(
+            mean_source_confidence * dominant_probability,
+            0.0,
+            1.0,
+        ).astype(np.float32)
 
     if config.ground_interpolation_iterations > 0:
         before_interpolation = costs == UNKNOWN_COST
@@ -329,6 +345,7 @@ def build_semantic_costmap(
         costs=costs,
         class_ids=class_ids,
         evidence_count=evidence,
+        confidence=confidence,
         obstacle_mask=obstacle_mask,
         config=config,
         semantic_mask=semantic_mask,
@@ -396,6 +413,28 @@ def costmap_to_rgb(
     return np.flipud(image)
 
 
+def confidence_to_rgb(
+    confidence: np.ndarray,
+    known_mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """Render confidence from blue (low) to yellow (high)."""
+
+    confidence = np.asarray(confidence, dtype=np.float32)
+    if confidence.ndim != 2:
+        raise ValueError("confidence must be a two-dimensional array")
+    clipped = np.clip(confidence, 0.0, 1.0)
+    image = np.empty((*clipped.shape, 3), dtype=np.uint8)
+    image[..., 0] = (255.0 * clipped).astype(np.uint8)
+    image[..., 1] = (120.0 + 135.0 * clipped).astype(np.uint8)
+    image[..., 2] = (255.0 * (1.0 - clipped)).astype(np.uint8)
+    if known_mask is not None:
+        known_mask = np.asarray(known_mask, dtype=bool)
+        if known_mask.shape != clipped.shape:
+            raise ValueError("known_mask must match confidence shape")
+        image[~known_mask] = (70, 70, 70)
+    return np.flipud(image)
+
+
 def semantic_map_to_rgb(
     class_ids: np.ndarray,
     known_mask: np.ndarray | None = None,
@@ -436,6 +475,7 @@ def save_costmap(
         costs=costmap.costs,
         class_ids=costmap.class_ids,
         evidence_count=costmap.evidence_count,
+        confidence=costmap.confidence,
         obstacle_mask=costmap.obstacle_mask,
         semantic_mask=costmap.semantic_mask,
         interpolated_free_mask=costmap.interpolated_free_mask,

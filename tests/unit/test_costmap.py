@@ -46,6 +46,7 @@ def test_costmap_places_semantic_cost_in_metric_cell():
     assert result.costs[1, 1] == 220
     assert result.class_ids[1, 1] == 1
     assert result.evidence_count[1, 1] == 2
+    assert 0.0 < result.confidence[1, 1] <= 1.0
     assert result.costs[0, 0] == UNKNOWN_COST
 
 

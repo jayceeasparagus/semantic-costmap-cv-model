@@ -10,7 +10,11 @@ import numpy as np
 from PIL import Image
 
 from semantic_costmap.config import DEFAULT_CHECKPOINT_PATH
-from semantic_costmap.costmap import costmap_to_rgb, semantic_map_to_rgb
+from semantic_costmap.costmap import (
+    confidence_to_rgb,
+    costmap_to_rgb,
+    semantic_map_to_rgb,
+)
 from semantic_costmap.mapping import GlobalMapConfig, PoseAwareAccumulator
 from semantic_costmap.pipeline import SemanticCostmapPipeline
 from semantic_costmap.playback import (
@@ -62,6 +66,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--global-map-range", type=float, default=100.0)
     parser.add_argument("--dynamic-decay-seconds", type=float, default=2.0)
+    parser.add_argument("--map-gap-fill-iterations", type=int, default=1)
+    parser.add_argument("--map-gap-fill-min-neighbors", type=int, default=5)
     parser.add_argument("--route-goal-forward", type=float, default=12.0)
     parser.add_argument("--route-min-forward", type=float, default=5.0)
     parser.add_argument("--route-lateral-tolerance", type=float, default=5.0)
@@ -100,6 +106,8 @@ def main() -> None:
                 y_min=-args.global_map_range,
                 y_max=args.global_map_range,
                 dynamic_decay_seconds=args.dynamic_decay_seconds,
+                map_gap_fill_iterations=args.map_gap_fill_iterations,
+                map_gap_fill_min_neighbors=args.map_gap_fill_min_neighbors,
             )
         )
     route_planner = LocalRoutePlanner(
@@ -179,11 +187,14 @@ def main() -> None:
         accumulated_arrays = args.output_dir / "accumulated_costmap.npz"
         accumulated_preview = args.output_dir / "accumulated_costmap_preview.png"
         semantic_preview = args.output_dir / "accumulated_semantic_map.png"
+        confidence_preview = args.output_dir / "accumulated_confidence.png"
+        confidence = accumulator.confidence_grid(last_pose_timestamp)
         np.savez_compressed(
             accumulated_arrays,
             costs=accumulated,
             semantic_class_ids=semantic_classes,
             semantic_known_mask=semantic_known,
+            confidence=confidence,
             resolution=accumulator.config.resolution,
             x_min=accumulator.config.x_min,
             y_min=accumulator.config.y_min,
@@ -195,6 +206,10 @@ def main() -> None:
             semantic_map_to_rgb(semantic_classes, semantic_known),
             mode="RGB",
         ).save(semantic_preview)
+        Image.fromarray(
+            confidence_to_rgb(confidence, semantic_known),
+            mode="RGB",
+        ).save(confidence_preview)
         trajectory_preview = args.output_dir / "odometry_trajectory.png"
         trajectory_image = render_trajectory(list(pose_records.values()))
         trajectory_image.save(trajectory_preview)
@@ -203,6 +218,19 @@ def main() -> None:
             "known_cells": int((accumulated != 255).sum()),
             "preview": str(accumulated_preview),
             "semantic_preview": str(semantic_preview),
+            "confidence_preview": str(confidence_preview),
+            "mean_confidence": float(confidence[semantic_known].mean())
+            if semantic_known.any()
+            else 0.0,
+            "active_dynamic_cells": int(
+                np.count_nonzero(
+                    (accumulator.dynamic_costs >= 0)
+                    & (
+                        last_pose_timestamp - accumulator.dynamic_last_seen
+                        <= accumulator.config.dynamic_decay_seconds
+                    )
+                )
+            ),
             "trajectory_preview": str(trajectory_preview),
         }
     benchmark_path = args.output_dir / "benchmark.json"
@@ -220,6 +248,7 @@ def main() -> None:
         print(f"Saved accumulated map: {accumulated_arrays}")
         print(f"Saved accumulated preview: {accumulated_preview}")
         print(f"Saved semantic map: {semantic_preview}")
+        print(f"Saved confidence map: {confidence_preview}")
         print(f"Saved trajectory preview: {trajectory_preview}")
 
 

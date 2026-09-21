@@ -76,10 +76,12 @@ cell_x = floor((point_x - origin_x) / resolution)
 cell_y = floor((point_y - origin_y) / resolution)
 ```
 
-Each cell averages its accumulated class probabilities and converts the result
-to a probability-weighted navigation cost. Small unknown gaps are filled only
-when they have enough neighboring drivable cells. This is local interpolation,
-not an assumption that every unknown cell is road.
+Each cell averages its accumulated class probabilities, weighted by the
+confidence of each painted point, and converts the result to a
+probability-weighted navigation cost. The local grid stores a fused confidence
+value alongside the class and cost. Small unknown gaps are filled only when
+they have enough neighboring drivable cells. This is local interpolation, not
+an assumption that every unknown cell is road.
 
 Each LiDAR return also defines an observed free-space ray from the sensor to the
 return. A vectorized grid-ray sampler marks previously unknown cells along that
@@ -141,10 +143,12 @@ places each local observation into a global metric grid. Offline playback can
 consume the generated CSV and saves both `accumulated_costmap_preview.png` and
 `odometry_trajectory.png`.
 
-Static evidence uses maximum-cost persistence. Dynamic-obstacle evidence is
-stored separately and expires after a configurable timeout, revealing any
-underlying static cost. This avoids permanently painting a moving vehicle into
-the map.
+Static evidence uses confidence-weighted semantic voting plus conservative
+maximum-cost persistence. Dynamic-obstacle evidence is stored separately,
+retains a confidence value, and expires after a configurable timeout, revealing
+any underlying static cost. This avoids permanently painting a moving vehicle
+into the map. The offline playback also exports a confidence heatmap and
+reports mean map confidence and the number of currently active dynamic cells.
 
 ## 9. Safety and engineering boundaries
 

@@ -7,10 +7,18 @@ frame into `map`. With SLAM Toolbox this is normally composed from
 `map -> odom -> base_link`.
 
 Each painted point is transformed at its sensor timestamp and inserted into a
-global metric grid. Static classes use maximum-cost accumulation so later
-drivable predictions cannot erase an obstacle. Dynamic-obstacle cells live in a
-separate layer and expire after `dynamic_decay_seconds`; when they expire, any
+global metric grid. Static classes accumulate confidence-weighted evidence, so
+repeated high-confidence observations stabilize the semantic label. Costs still
+use conservative maximum merging, so a later drivable prediction cannot erase
+an obstacle. Dynamic-obstacle cells live in a separate layer, retain their
+confidence, and expire after `dynamic_decay_seconds`; when they expire, any
 underlying static cost becomes visible again.
+
+The accumulator also fills only small unknown holes surrounded by enough static
+drivable cells. This is a conservative map-completion step for skipped frames,
+not a replacement for processing denser sensor data. The offline playback
+exports `accumulated_confidence.png` and stores the confidence grid in its NPZ
+artifact so uncertain map regions remain visible.
 
 The accumulator subscribes to `painted_points` and publishes
 `semantic_global_costmap`. Configure the Nav2 semantic layer to consume either
