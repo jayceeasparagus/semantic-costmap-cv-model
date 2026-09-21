@@ -1,68 +1,85 @@
 # Semantic Mapping from Camera and LiDAR
 
-An undergraduate-level autonomous-vehicle perception project that builds a
-persistent semantic map while a vehicle moves through an environment.
+An undergraduate autonomous-vehicle perception project that builds a semantic
+map from synchronized camera and LiDAR data.
+
+## What it does
+
+The system processes each driving frame through four stages:
+
+1. A compact U-Net predicts a semantic class for each camera pixel.
+2. Camera calibration projects LiDAR points into the image.
+3. Each visible LiDAR point receives a semantic label and confidence score.
+4. Pose-aligned frame grids are accumulated into a persistent map.
+
+The camera provides semantic meaning, LiDAR provides metric 3D geometry, and
+recorded vehicle poses place observations into a shared map frame.
+
+## Pipeline
 
 ```text
-RGB frame -> U-Net -> per-pixel semantic probabilities
-                                  |
-LiDAR + camera calibration -------+-> semantically painted 3D points
-                                         |
-                                         v
-                                frame-level semantic grid
-                                         |
-                              pose-aligned map fusion
-                                         |
-                              persistent semantic map
+RGB image
+   ↓
+U-Net semantic segmentation
+   ↓
+Camera–LiDAR calibration
+   ↓
+Semantic 3D point painting
+   ↓
+Frame-level semantic grid
+   ↓
+Pose-aligned map accumulation
+   ↓
+Persistent semantic map
 ```
 
-The camera predicts **what** is present, LiDAR measures **where** it is, and
-vehicle poses place observations into a shared map frame. The project is an
-offline A2D2 sequence replay focused on semantic map construction.
-
-## Project scope
-
-The main question is: can synchronized camera and LiDAR observations be fused
-into a useful semantic map of the road environment? The project focuses on
-drivable ground, non-drivable regions, static obstacles, dynamic obstacles,
-and unknown space. Route planning is kept as an optional experiment and is not
-part of the main mapping benchmark.
+The five classes are `drivable`, `non_drivable`, `static_obstacle`,
+`dynamic_obstacle`, and `background`.
 
 ## Results
 
-The U-Net was trained from scratch on A2D2 with five navigation-oriented
-classes. The selected epoch-29 checkpoint achieved:
+The epoch-29 checkpoint was trained on A2D2 and achieved:
 
-- **0.8456** navigation mIoU on validation;
-- **0.7966** navigation mIoU and **0.8314** all-class mIoU on the test split;
-- **0.9439 / 0.8707 / 0.6452 / 0.7265** test IoU for drivable,
-  non-drivable, static-obstacle, and dynamic-obstacle classes.
+- **79.7% test navigation mIoU**;
+- **83.1% test all-class mIoU**;
+- **0.67 FPS** for a 120-frame CPU playback using every fifth frame;
+- approximately **1.50 seconds per processed frame** end to end on CPU.
 
-An eight-frame dense-costmap CPU playback ran at **0.60 FPS**. U-Net inference
-averaged 1535.4 ms, while projection, semantic fusion, and costmap generation
-together averaged 30.4 ms. See [benchmark results](docs/benchmark_results.md).
+## Demo
 
-## Semantic classes
+Activate the environment and run the long sequential playback:
 
-| ID | Class | Mapping meaning |
-|---:|---|---|
-| 0 | `drivable` | preferred ground |
-| 1 | `non_drivable` | strongly avoid |
-| 2 | `static_obstacle` | fixed collision hazard |
-| 3 | `dynamic_obstacle` | temporary collision hazard |
-| 4 | `background` | sky and non-spatial context |
+```bash
+cd ~/projects/semantic-costmap-cv-model
+source .venv/bin/activate
+export PYTHONPATH=src
 
-Raw LiDAR obstacle evidence can raise a cell's cost but semantic predictions
-cannot lower it. Cells outside observed rays remain unknown.
+python tools/run_playback.py --device cpu
+```
 
-LiDAR ray tracing marks observed space before each return as free, and a
-conservative neighbor rule fills small gaps surrounded by drivable evidence.
-On the included sample these steps increased single-frame known coverage from
-4.65% to 45.40% without lowering obstacle costs.
+The default demo uses the 600-frame sequential A2D2 playback, processes 120
+frames with stride 5, and creates a 10 FPS GIF. Results are written to:
 
-## Local setup
+```text
+outputs/playback/semantic_costmap_playback.gif
+outputs/playback/benchmark.json
+```
 
-The tools require Python 3.10 or newer:
+To accumulate a persistent map, provide a pose CSV:
+
+```bash
+python tools/run_playback.py \
+  --device cpu \
+  --poses-csv outputs/poses/poses.csv \
+  --output-dir outputs/mapping_demo
+```
+
+This additionally saves the accumulated semantic map, confidence map, and
+trajectory preview.
+
+## Setup
+
+Create the Python environment and install the project:
 
 ```bash
 python3 -m venv .venv
@@ -76,76 +93,23 @@ Place the trained checkpoint at:
 outputs/checkpoints/epoch29_restore/best_semantic_unet.pt
 ```
 
-The default single-frame demos expect paired samples under
-`data/raw/a2d2_sample/`. The long playback demo expects the 600-frame sequence
-under `data/raw/sequential_playback/`. Data, checkpoints, and generated outputs
-are ignored by Git.
-
-## Offline demonstration
-
-Run each stage from the repository root:
-
-```bash
-# 1. Segment one RGB image.
-python tools/run_inference.py --device cpu
-
-# 2. Recompute LiDAR image coordinates from calibration.
-python tools/validate_calibration_projection.py
-
-# 3. Attach semantic probabilities and costs to 3D points.
-python tools/paint_semantic_points.py --device cpu
-
-# 4. Rasterize the painted cloud into a frame-level metric grid.
-python tools/generate_costmap.py
-
-# 5. Replay a longer sequence while skipping intermediate frames.
-python tools/run_playback.py --device cpu --stride 5 --max-frames 120 --gif-fps 10
-
-# 6. Accumulate frame-level grids into a persistent map.
-python tools/demo_pose_accumulation.py
-```
-
-For pose-aligned sequence accumulation, provide a CSV containing
-`frame_id,timestamp,x,y,yaw` and add `--poses-csv path/to/poses.csv` to the
-playback command. These are map-to-base poses from recorded odometry or another
-localization source.
-
-Each tool writes inspectable images and arrays under `outputs/`. The playback
-GIF shows the RGB image, semantic overlay, painted LiDAR, and frame-level
-semantic grid. When poses are supplied, it also writes the persistent semantic
-map, confidence map, and trajectory preview. Detailed data flow and equations
-are in [the architecture guide](docs/architecture.md).
-
-## Project boundaries
-
-The repository intentionally focuses on offline semantic mapping. The mapping
-demo uses recorded odometry poses to place observations in a shared frame.
-
-## Tests
-
-```bash
-source .venv/bin/activate
-tools/run_checks.sh
-```
-
-The check runs the Python tests and compile checks. The A2D2 integration test
-skips when local data or the checkpoint is unavailable.
-
-## Repository layout
+The long demo expects paired files at:
 
 ```text
-configs/                 A2D2 calibration and label definitions
-docs/                    Design, demo, and test documentation
-src/semantic_costmap/    Shared inference, geometry, fusion, and mapping code
-tools/                   Offline demos and validation commands
-tests/                   Unit and end-to-end integration tests
-data/                    Local datasets (ignored)
-outputs/                 Generated artifacts and checkpoints (ignored)
+data/raw/sequential_playback/camera/*.png
+data/raw/sequential_playback/lidar/*.npz
 ```
 
-## Scope and limitations
+Single-frame tools use samples under `data/raw/a2d2_sample/`.
 
-This is a tested offline mapping pipeline, not a vehicle-certified system. The
-main map demo uses bus-derived odometry, so it should be evaluated as a
-relative mapping demonstration rather than a localization benchmark. GPU
-inference or model optimization is needed for practical real-time rates.
+## Repository structure
+
+```text
+configs/                 Calibration and class definitions
+src/semantic_costmap/    Model, geometry, fusion, grids, and mapping
+tools/                   Inference, playback, pose, and visualization commands
+tests/                   Python unit and integration tests
+docs/                    Short design and usage notes
+data/                    Local datasets, ignored by Git
+outputs/                 Checkpoints and generated artifacts, ignored by Git
+```
