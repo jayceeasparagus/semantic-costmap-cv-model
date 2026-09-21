@@ -16,7 +16,7 @@ data/raw/a2d2_playback/lidar/*.npz
 Run a CPU benchmark with:
 
 ```bash
-python tools/run_playback.py --device cpu --stride 5 --max-frames 60 --gif-fps 10
+python tools/run_playback.py --device cpu --stride 5 --max-frames 120 --gif-fps 10
 ```
 
 To accumulate the frames in a persistent map, provide map-to-base poses:
@@ -31,7 +31,7 @@ frame_id,timestamp,x,y,yaw
 python tools/run_playback.py \
   --device cpu \
   --stride 5 \
-  --max-frames 60 \
+  --max-frames 120 \
   --gif-fps 10 \
   --poses-csv poses.csv
 ```

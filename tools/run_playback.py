@@ -54,8 +54,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-frames",
         type=int,
-        default=60,
-        help="Number of sampled frames to process (default: 60)",
+        default=120,
+        help="Number of sampled frames to process (default: 120)",
     )
     parser.add_argument(
         "--stride",

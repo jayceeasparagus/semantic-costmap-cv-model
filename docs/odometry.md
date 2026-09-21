@@ -41,7 +41,7 @@ accepted by `tools/run_playback.py`.
 python tools/run_playback.py \
   --poses-csv outputs/poses/20180807_bus_odometry.csv \
   --stride 5 \
-  --max-frames 60 \
+  --max-frames 120 \
   --gif-fps 10 \
   --device cpu
 ```

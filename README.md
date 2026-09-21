@@ -99,7 +99,7 @@ python tools/paint_semantic_points.py --device cpu
 python tools/generate_costmap.py
 
 # 5. Replay a longer sequence while skipping intermediate frames.
-python tools/run_playback.py --device cpu --stride 5 --max-frames 60 --gif-fps 10
+python tools/run_playback.py --device cpu --stride 5 --max-frames 120 --gif-fps 10
 
 # 6. Accumulate frame-level grids into a persistent map.
 python tools/demo_pose_accumulation.py
