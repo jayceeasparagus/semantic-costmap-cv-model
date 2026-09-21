@@ -1,7 +1,7 @@
 # Semantic Mapping from Camera and LiDAR
 
-An undergraduate autonomous-vehicle perception project that builds a semantic
-map from synchronized camera and LiDAR data.
+A camera-LiDAR perception pipeline that builds persistent semantic maps of
+drivable space and obstacles from recorded driving data.
 
 ## What it does
 
