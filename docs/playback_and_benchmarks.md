@@ -16,7 +16,7 @@ data/raw/sequential_playback/lidar/*.npz
 Run a CPU benchmark with:
 
 ```bash
-python tools/run_playback.py --device cpu --stride 5 --max-frames 120 --gif-fps 10
+python tools/run_playback.py --device cpu --stride 3 --max-frames 200 --gif-fps 10
 ```
 
 To accumulate the frames in a persistent map, provide map-to-base poses:
@@ -30,8 +30,8 @@ frame_id,timestamp,x,y,yaw
 ```bash
 python tools/run_playback.py \
   --device cpu \
-  --stride 5 \
-  --max-frames 120 \
+  --stride 3 \
+  --max-frames 200 \
   --gif-fps 10 \
   --poses-csv poses.csv
 ```
@@ -50,6 +50,8 @@ real-time claim.
 With poses, the tool additionally saves `accumulated_costmap.npz` and
 `accumulated_costmap_preview.png`, `accumulated_confidence.png`, and
 `odometry_trajectory.png` in the selected output directory.
+The PNG previews are cropped around known cells for easier viewing; the NPZ
+file retains the full configured map bounds.
 
 The default command measures mapping only. The experimental frame-level route
 planner is intentionally opt-in:

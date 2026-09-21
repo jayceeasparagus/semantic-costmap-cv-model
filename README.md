@@ -42,8 +42,8 @@ The epoch-29 checkpoint was trained on A2D2 and achieved:
 
 - **79.7% test navigation mIoU**;
 - **83.1% test all-class mIoU**;
-- **0.67 FPS** for a 120-frame CPU playback using every fifth frame;
-- approximately **1.50 seconds per processed frame** end to end on CPU.
+- **0.69 FPS** for a 200-frame CPU playback using every third frame;
+- approximately **1.45 seconds per processed frame** end to end on CPU.
 
 ## Demo
 
@@ -57,8 +57,10 @@ export PYTHONPATH=src
 python tools/run_playback.py --device cpu
 ```
 
-The default demo uses the 600-frame sequential A2D2 playback, processes 120
-frames with stride 5, and creates a 10 FPS GIF. Results are written to:
+The default demo uses the 600-frame sequential A2D2 playback, processes 200
+frames with stride 3, and creates a 10 FPS GIF. The persistent map window is
+200 m in each direction so the longer trajectory is not clipped. Results are
+written to:
 
 ```text
 outputs/playback/semantic_costmap_playback.gif

@@ -40,8 +40,8 @@ accepted by `tools/run_playback.py`.
 ```bash
 python tools/run_playback.py \
   --poses-csv outputs/poses/20180807_bus_odometry.csv \
-  --stride 5 \
-  --max-frames 120 \
+  --stride 3 \
+  --max-frames 200 \
   --gif-fps 10 \
   --device cpu
 ```

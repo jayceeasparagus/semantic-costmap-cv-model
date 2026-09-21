@@ -18,7 +18,7 @@ python tools/run_inference.py --device cpu
 python tools/validate_calibration_projection.py
 python tools/paint_semantic_points.py --device cpu
 python tools/generate_costmap.py
-python tools/run_playback.py --device cpu --stride 5 --max-frames 120 --gif-fps 10
+python tools/run_playback.py --device cpu --stride 3 --max-frames 200 --gif-fps 10
 ```
 
 The commands write diagnostic images and arrays under `outputs/`. The
@@ -30,7 +30,7 @@ signals, then pass it to playback:
 
 ```bash
 python tools/build_a2d2_poses.py
-python tools/run_playback.py --device cpu --stride 5 --max-frames 120 \
+python tools/run_playback.py --device cpu --stride 3 --max-frames 200 \
   --gif-fps 10 \
   --poses-csv outputs/poses/20180807_bus_odometry.csv
 ```

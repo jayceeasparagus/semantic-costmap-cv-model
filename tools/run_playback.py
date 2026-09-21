@@ -27,6 +27,24 @@ from semantic_costmap.playback import (
 from semantic_costmap.planning import LocalRoutePlanner, RoutePlannerConfig
 
 
+def crop_map_preview(
+    image: np.ndarray,
+    known_mask: np.ndarray,
+    padding_cells: int = 20,
+) -> np.ndarray:
+    """Crop a display image around known cells without changing map arrays."""
+
+    flipped_known = np.flipud(np.asarray(known_mask, dtype=bool))
+    rows, columns = np.nonzero(flipped_known)
+    if not len(rows):
+        return image
+    row_min = max(int(rows.min()) - padding_cells, 0)
+    row_max = min(int(rows.max()) + padding_cells + 1, image.shape[0])
+    column_min = max(int(columns.min()) - padding_cells, 0)
+    column_max = min(int(columns.max()) + padding_cells + 1, image.shape[1])
+    return image[row_min:row_max, column_min:column_max]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -54,14 +72,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-frames",
         type=int,
-        default=120,
-        help="Number of sampled frames to process (default: 120)",
+        default=200,
+        help="Number of sampled frames to process (default: 200)",
     )
     parser.add_argument(
         "--stride",
         type=int,
-        default=5,
-        help="Keep every Nth paired frame before applying --max-frames (default: 5)",
+        default=3,
+        help="Keep every Nth paired frame before applying --max-frames (default: 3)",
     )
     parser.add_argument("--gif-fps", type=float, default=10.0)
     parser.add_argument(
@@ -69,7 +87,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="CSV with frame_id,timestamp,x,y,yaw map-to-base poses",
     )
-    parser.add_argument("--global-map-range", type=float, default=100.0)
+    parser.add_argument(
+        "--global-map-range",
+        type=float,
+        default=200.0,
+        help="Half-width and half-height of the persistent map in meters",
+    )
     parser.add_argument("--dynamic-decay-seconds", type=float, default=2.0)
     parser.add_argument("--map-gap-fill-iterations", type=int, default=1)
     parser.add_argument("--map-gap-fill-min-neighbors", type=int, default=5)
@@ -216,17 +239,19 @@ def main() -> None:
             x_min=accumulator.config.x_min,
             y_min=accumulator.config.y_min,
         )
-        Image.fromarray(costmap_to_rgb(accumulated), mode="RGB").save(
-            accumulated_preview
+        costmap_image = crop_map_preview(
+            costmap_to_rgb(accumulated), accumulated != 255
         )
-        Image.fromarray(
+        semantic_image = crop_map_preview(
             semantic_map_to_rgb(semantic_classes, semantic_known),
-            mode="RGB",
-        ).save(semantic_preview)
-        Image.fromarray(
-            confidence_to_rgb(confidence, semantic_known),
-            mode="RGB",
-        ).save(confidence_preview)
+            semantic_known,
+        )
+        confidence_image = crop_map_preview(
+            confidence_to_rgb(confidence, semantic_known), semantic_known
+        )
+        Image.fromarray(costmap_image, mode="RGB").save(accumulated_preview)
+        Image.fromarray(semantic_image, mode="RGB").save(semantic_preview)
+        Image.fromarray(confidence_image, mode="RGB").save(confidence_preview)
         trajectory_preview = args.output_dir / "odometry_trajectory.png"
         trajectory_image = render_trajectory(list(pose_records.values()))
         trajectory_image.save(trajectory_preview)

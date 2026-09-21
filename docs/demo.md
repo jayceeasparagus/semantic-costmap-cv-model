@@ -11,7 +11,7 @@ python tools/run_inference.py --device cpu
 python tools/validate_calibration_projection.py
 python tools/paint_semantic_points.py --device cpu
 python tools/generate_costmap.py
-python tools/run_playback.py --device cpu --stride 5 --max-frames 120 --gif-fps 10
+python tools/run_playback.py --device cpu --stride 3 --max-frames 200 --gif-fps 10
 python tools/demo_pose_accumulation.py
 ```
 
@@ -19,7 +19,7 @@ To use measured poses during playback, create a CSV with the columns
 `frame_id,timestamp,x,y,yaw` and run:
 
 ```bash
-python tools/run_playback.py --device cpu --stride 5 --max-frames 120 \
+python tools/run_playback.py --device cpu --stride 3 --max-frames 200 \
   --gif-fps 10 --poses-csv poses.csv
 ```
 
